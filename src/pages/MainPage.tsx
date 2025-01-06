@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import { FaPaperPlane, FaUser } from 'react-icons/fa';
+import { signOut } from 'firebase/auth';
+import { auth } from '../firebase';
+import { useNavigate } from 'react-router-dom';
 
 interface Message {
   id: number;
@@ -14,10 +17,15 @@ const MainPage: React.FC = () => {
   const [message, setMessage] = useState('');
   const [selectedChannel, setSelectedChannel] = useState('general');
   const [messages, setMessages] = useState<Message[]>([]);
+  const navigate = useNavigate();
 
-  const handleSignOut = () => {
-    localStorage.removeItem('isAuthenticated');
-    window.location.href = '/auth';
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      navigate('/auth');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
   };
 
   const handleSendMessage = (e: React.FormEvent) => {

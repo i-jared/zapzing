@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../firebase';
 
 interface SignInProps {
   onSignUpClick: () => void;
@@ -9,21 +11,31 @@ interface SignInProps {
 const SignIn: React.FC<SignInProps> = ({ onSignUpClick, onForgotPasswordClick }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In a real app, you would validate credentials here
-    localStorage.setItem('isAuthenticated', 'true');
-    // Dispatch custom event to notify App component
-    window.dispatchEvent(new Event('authChange'));
-    navigate('/');
+    setError('');
+    
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      navigate('/');
+    } catch (err: any) {
+      console.error('Sign in error:', err);
+      setError(err.message || 'Failed to sign in');
+    }
   };
 
   return (
     <>
       <h2 className="card-title justify-center mb-4">Sign In</h2>
       <form onSubmit={handleSubmit}>
+        {error && (
+          <div className="alert alert-error mb-4">
+            <span>{error}</span>
+          </div>
+        )}
         <div className="form-control">
           <label className="label">
             <span className="label-text">Email</span>

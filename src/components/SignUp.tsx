@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../firebase';
+import { useNavigate } from 'react-router-dom';
 
 interface SignUpProps {
   onSignInClick: () => void;
@@ -8,21 +11,36 @@ const SignUp: React.FC<SignUpProps> = ({ onSignInClick }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+
     if (password !== confirmPassword) {
-      alert("Passwords don't match");
+      setError('Passwords do not match');
       return;
     }
-    // TODO: Implement sign up logic
-    console.log('Sign up with:', email, password);
+
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+      navigate('/');
+    } catch (err: any) {
+      console.error('Sign up error:', err);
+      setError(err.message || 'Failed to create account');
+    }
   };
 
   return (
     <>
-      <h2 className="card-title justify-center mb-4">Create an Account</h2>
+      <h2 className="card-title justify-center mb-4">Create Account</h2>
       <form onSubmit={handleSubmit}>
+        {error && (
+          <div className="alert alert-error mb-4">
+            <span>{error}</span>
+          </div>
+        )}
         <div className="form-control">
           <label className="label">
             <span className="label-text">Email</span>
@@ -63,11 +81,13 @@ const SignUp: React.FC<SignUpProps> = ({ onSignInClick }) => {
           />
         </div>
         <div className="form-control mt-6">
-          <button type="submit" className="btn btn-primary">Sign Up</button>
+          <button type="submit" className="btn btn-primary">Create Account</button>
         </div>
       </form>
       <div className="divider">OR</div>
-      <button className="btn btn-outline btn-sm" onClick={onSignInClick}>Already have an account? Sign In</button>
+      <button className="btn btn-outline btn-sm" onClick={onSignInClick}>
+        Already have an account? Sign in
+      </button>
     </>
   );
 };
