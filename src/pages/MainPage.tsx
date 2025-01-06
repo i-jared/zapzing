@@ -1,10 +1,19 @@
 import React, { useState } from 'react';
 import Sidebar from '../components/Sidebar';
-import { FaPaperPlane } from 'react-icons/fa';
+import { FaPaperPlane, FaUser } from 'react-icons/fa';
+
+interface Message {
+  id: number;
+  text: string;
+  sender: string;
+  timestamp: Date;
+  channel: string;
+}
 
 const MainPage: React.FC = () => {
   const [message, setMessage] = useState('');
   const [selectedChannel, setSelectedChannel] = useState('general');
+  const [messages, setMessages] = useState<Message[]>([]);
 
   const handleSignOut = () => {
     localStorage.removeItem('isAuthenticated');
@@ -14,9 +23,30 @@ const MainPage: React.FC = () => {
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (message.trim()) {
-      console.log(`Sending message to ${selectedChannel}: ${message}`);
+      const newMessage: Message = {
+        id: Date.now(),
+        text: message.trim(),
+        sender: 'You',
+        timestamp: new Date(),
+        channel: selectedChannel
+      };
+      setMessages(prev => [...prev, newMessage]);
       setMessage('');
     }
+  };
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    });
+  };
+
+  const shouldShowHeader = (currentMsg: Message, index: number, messages: Message[]) => {
+    if (index === 0) return true;
+    const prevMsg = messages[index - 1];
+    return prevMsg.sender !== currentMsg.sender;
   };
 
   return (
@@ -42,24 +72,56 @@ const MainPage: React.FC = () => {
 
         {/* Messages Area */}
         <div className="flex-1 p-4 overflow-y-auto">
-          <div className="alert alert-info">
-            <span>No messages yet in #{selectedChannel}</span>
-          </div>
+          {messages.filter(m => m.channel === selectedChannel).length === 0 ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center opacity-50">
+                <div className="text-lg font-semibold">No messages yet</div>
+                <div className="text-sm">Send the first message in #{selectedChannel}</div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col space-y-2">
+              {messages
+                .filter(m => m.channel === selectedChannel)
+                .map((msg, index, filteredMessages) => (
+                  <div key={msg.id} className="flex pl-4">
+                    <div className="w-10 flex-shrink-0">
+                      {shouldShowHeader(msg, index, filteredMessages) && (
+                        <div className="avatar placeholder">
+                          <div className="bg-neutral text-neutral-content rounded-full w-10">
+                            <FaUser className="w-6 h-6" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0 ml-4">
+                      {shouldShowHeader(msg, index, filteredMessages) && (
+                        <div className="flex items-baseline mb-1">
+                          <span className="font-bold">{msg.sender}</span>
+                          <time className="text-xs opacity-50 ml-2">{formatTime(msg.timestamp)}</time>
+                        </div>
+                      )}
+                      <div className="text-base-content">{msg.text}</div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
 
         {/* Message Input */}
         <div className="bg-base-300 p-4 w-full">
           <form onSubmit={handleSendMessage} className="join w-full">
-            <input
-              type="text"
-              placeholder={`Message #${selectedChannel}`}
-              className="input input-bordered join-item flex-1"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-            />
             <button type="submit" className="btn btn-primary join-item">
               <FaPaperPlane />
             </button>
+            <input
+              type="text"
+              placeholder={`Message #${selectedChannel}`}
+              className="input input-bordered join-item flex-1 focus:outline-none"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+            />
           </form>
         </div>
       </div>
