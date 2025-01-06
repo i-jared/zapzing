@@ -1,14 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import { FaPaperPlane, FaUser } from 'react-icons/fa';
 import { signOut } from 'firebase/auth';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
 import { useNavigate } from 'react-router-dom';
+import { 
+  collection, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  addDoc, 
+  serverTimestamp,
+  Timestamp 
+} from 'firebase/firestore';
 
 interface Message {
-  id: number;
+  id: string;
   text: string;
-  sender: string;
+  sender: {
+    uid: string;
+    email: string;
+  };
   timestamp: Date;
   channel: string;
 }
@@ -17,7 +29,31 @@ const MainPage: React.FC = () => {
   const [message, setMessage] = useState('');
   const [selectedChannel, setSelectedChannel] = useState('general');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Subscribe to messages collection
+    const messagesRef = collection(db, 'messages');
+    const messagesQuery = query(messagesRef, orderBy('timestamp', 'asc'));
+
+    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+      const messagesData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        text: doc.data().text,
+        sender: doc.data().sender,
+        timestamp: doc.data().timestamp?.toDate() || new Date(),
+        channel: doc.data().channel
+      }));
+      setMessages(messagesData);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching messages:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handleSignOut = async () => {
     try {
@@ -28,18 +64,24 @@ const MainPage: React.FC = () => {
     }
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim()) {
-      const newMessage: Message = {
-        id: Date.now(),
+    if (!message.trim() || !auth.currentUser) return;
+
+    try {
+      const messagesRef = collection(db, 'messages');
+      await addDoc(messagesRef, {
         text: message.trim(),
-        sender: 'You',
-        timestamp: new Date(),
+        sender: {
+          uid: auth.currentUser.uid,
+          email: auth.currentUser.email
+        },
+        timestamp: serverTimestamp(),
         channel: selectedChannel
-      };
-      setMessages(prev => [...prev, newMessage]);
+      });
       setMessage('');
+    } catch (error) {
+      console.error('Error sending message:', error);
     }
   };
 
@@ -54,7 +96,7 @@ const MainPage: React.FC = () => {
   const shouldShowHeader = (currentMsg: Message, index: number, messages: Message[]) => {
     if (index === 0) return true;
     const prevMsg = messages[index - 1];
-    return prevMsg.sender !== currentMsg.sender;
+    return prevMsg.sender.uid !== currentMsg.sender.uid;
   };
 
   return (
@@ -80,7 +122,11 @@ const MainPage: React.FC = () => {
 
         {/* Messages Area */}
         <div className="flex-1 p-4 overflow-y-auto">
-          {messages.filter(m => m.channel === selectedChannel).length === 0 ? (
+          {loading ? (
+            <div className="h-full flex items-center justify-center">
+              <span className="loading loading-spinner loading-lg"></span>
+            </div>
+          ) : messages.filter(m => m.channel === selectedChannel).length === 0 ? (
             <div className="h-full flex items-center justify-center">
               <div className="text-center opacity-50">
                 <div className="text-lg font-semibold">No messages yet</div>
@@ -105,7 +151,7 @@ const MainPage: React.FC = () => {
                     <div className="flex-1 min-w-0 ml-4">
                       {shouldShowHeader(msg, index, filteredMessages) && (
                         <div className="flex items-baseline mb-1">
-                          <span className="font-bold">{msg.sender}</span>
+                          <span className="font-bold">{msg.sender.email}</span>
                           <time className="text-xs opacity-50 ml-2">{formatTime(msg.timestamp)}</time>
                         </div>
                       )}
