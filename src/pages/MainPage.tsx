@@ -244,21 +244,26 @@ const MainPage: React.FC = () => {
     if (!workspaceId || !selectedChannel) return;
 
     const typingRef = collection(db, 'typing');
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-    
     const q = query(
       typingRef,
       where('workspaceId', '==', workspaceId),
-      where('channel', '==', selectedChannel),
-      where('timestamp', '>', tenMinutesAgo)
+      where('channel', '==', selectedChannel)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const typingData: {[key: string]: {displayName: string | null, email: string}} = {};
+      const now = new Date();
       
       snapshot.docs.forEach(doc => {
         const data = doc.data();
-        if (doc.id !== auth.currentUser?.uid && data.isTyping) {
+        // Only show typing indicator if timestamp is within last 10 seconds
+        const timestamp = data.timestamp?.toDate();
+        if (
+          doc.id !== auth.currentUser?.uid && 
+          data.isTyping && 
+          timestamp && 
+          (now.getTime() - timestamp.getTime() < 10000)
+        ) {
           typingData[doc.id] = {
             displayName: data.displayName,
             email: data.email
@@ -277,21 +282,29 @@ const MainPage: React.FC = () => {
     if (!auth.currentUser || !workspaceId || !selectedChannel) return;
 
     const typingRef = doc(db, 'typing', auth.currentUser.uid);
+    const userActivityRef = doc(db, 'userActivity', auth.currentUser.uid);
 
     // Clear any existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-    // Set typing status
-    await setDoc(typingRef, {
-      isTyping: true,
-      channel: selectedChannel,
-      workspaceId,
-      timestamp: serverTimestamp(),
-      displayName: auth.currentUser.displayName,
-      email: auth.currentUser.email
-    });
+    // Update both typing status and user activity
+    await Promise.all([
+      setDoc(typingRef, {
+        isTyping: true,
+        channel: selectedChannel,
+        workspaceId,
+        timestamp: serverTimestamp(),
+        displayName: auth.currentUser.displayName,
+        email: auth.currentUser.email
+      }),
+      setDoc(userActivityRef, {
+        lastActive: serverTimestamp(),
+        email: auth.currentUser.email,
+        displayName: auth.currentUser.displayName
+      }, { merge: true })
+    ]);
 
     // Set timeout to clear typing status after 5 seconds
     typingTimeoutRef.current = setTimeout(async () => {
@@ -308,11 +321,11 @@ const MainPage: React.FC = () => {
     }, 5000);
   }, [workspaceId, selectedChannel]);
 
-  // Update message input handler
-  const handleMessageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Update message input handler to use debounced typing status
+  const handleMessageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setMessage(e.target.value);
     handleTypingStatus();
-  };
+  }, [handleTypingStatus]);
 
   const handleSignOut = async () => {
     try {
