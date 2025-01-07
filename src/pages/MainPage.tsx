@@ -144,7 +144,7 @@ const MainPage: React.FC = () => {
     const messagesQuery = query(
       messagesRef,
       where('workspaceId', '==', workspaceId),
-      orderBy('timestamp', 'desc')
+      orderBy('timestamp', 'asc')
     );
 
     const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
