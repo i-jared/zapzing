@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { FaPlus } from 'react-icons/fa';
 import { 
   collection, 
   query, 
@@ -7,14 +8,12 @@ import {
   onSnapshot, 
   addDoc, 
   serverTimestamp,
-  getDocs,
   doc,
   getDoc,
   updateDoc,
   arrayUnion
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
-import { FaPlus } from 'react-icons/fa';
 
 interface Workspace {
   id: string;

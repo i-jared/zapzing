@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
-import { FaPaperPlane, FaUser, FaUsers, FaChevronDown, FaChevronRight, FaBuilding, FaCog, FaUserCircle, FaCamera } from 'react-icons/fa';
+import { FaPaperPlane, FaUser, FaBuilding, FaUserCircle, FaCamera, FaChevronDown, FaChevronRight } from 'react-icons/fa';
 import { signOut, updateProfile } from 'firebase/auth';
 import { auth, db, storage } from '../firebase';
-import { useNavigate } from 'react-router-dom';
 import { 
   collection, 
   query, 
@@ -299,12 +298,26 @@ const MainPage: React.FC = () => {
 
       // Update or create user document in Firestore
       const userRef = doc(db, 'users', auth.currentUser.uid);
-      await setDoc(userRef, {
+      const userData = {
         email: auth.currentUser.email,
         displayName: displayName.trim() || null,
         photoURL,
         updatedAt: serverTimestamp()
-      }, { merge: true });
+      };
+      await setDoc(userRef, userData, { merge: true });
+
+      // Update local cache immediately
+      const currentUser = auth.currentUser;
+      if (currentUser?.uid) {
+        setUsersCache(prev => ({
+          ...prev,
+          [currentUser.uid]: {
+            email: currentUser.email ?? '',
+            displayName: displayName.trim() || null,
+            photoURL
+          }
+        }));
+      }
 
       // Update all messages from this user
       const messagesRef = collection(db, 'messages');
