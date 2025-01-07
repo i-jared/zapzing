@@ -2,8 +2,15 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import MessageInput from '../components/MessageInput';
-import { FaPaperPlane, FaUser, FaBuilding, FaUserCircle, FaCamera, FaChevronDown, FaChevronRight, FaSmile, FaFile, FaVideo, FaPencilAlt, FaFileImage, FaFilePdf, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileAlt, FaDownload, FaExternalLinkAlt, FaSearch } from 'react-icons/fa';
-import { signOut, updateProfile, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendEmailVerification } from 'firebase/auth';
+import FileListModal from '../components/FileListModal';
+import MessageList from '../components/MessageList';
+import InviteModal from '../components/InviteModal';
+import ProfileModal from '../components/ProfileModal';
+import AccountModal from '../components/AccountModal';
+import FileUploadModal from '../components/FileUploadModal';
+import WorkspaceSidebar from '../components/WorkspaceSidebar';
+import { FaUserCircle, FaBuilding } from 'react-icons/fa';
+import { signOut } from 'firebase/auth';
 import { auth, db, storage } from '../firebase';
 import { 
   collection, 
@@ -17,82 +24,17 @@ import {
   updateDoc,
   arrayUnion,
   getDoc,
-  setDoc,
   getDocs,
-  writeBatch,
-  limit
+  limit,
+  setDoc
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import data from '@emoji-mart/data'
-import Picker from '@emoji-mart/react'
+import { Message, UserData, ChannelMember } from '../types/chat';
+import { formatTime, shouldShowHeader, isDirectMessage, formatFileSize, getFileIcon } from '../utils/chat';
+import { getUserDisplayName, getUserPhotoURL } from '../utils/user';
+import { handleProfileUpdate, handleEmailUpdate, handlePasswordUpdate, handleResendVerification } from '../utils/auth';
 
-interface Reaction {
-  emoji: string;
-  users: string[];  // array of user IDs who reacted with this emoji
-}
-
-interface Message {
-  id: string;
-  text: string;
-  sender: {
-    uid: string;
-    email: string;
-    displayName?: string;
-    photoURL?: string;
-  };
-  timestamp: Date;
-  channel: string;
-  workspaceId: string;
-  reactions?: { [key: string]: Reaction };  // emoji as key
-  attachment?: {
-    type: 'file' | 'video' | 'drawing';
-    url: string;
-    name: string;
-    size: number;
-    contentType?: string;
-  };
-}
-
-interface UserData {
-  email: string;
-  displayName: string | null;
-  photoURL: string | null;
-}
-
-interface ChannelMember {
-  uid: string;
-  email: string;
-  isCurrentUser: boolean;
-  displayName?: string | null;
-  photoURL?: string | null;
-}
-
-interface UserActivity {
-  lastActive: Date;
-  isTyping: boolean;
-  typingIn: string | null;
-  displayName: string | null;
-}
-
-// Add common emojis array
 const COMMON_EMOJIS = ['👍', '❤️', '😂', '🎉', '🚀'];
-
-// Add helper function to get file icon
-const getFileIcon = (fileName: string, contentType?: string) => {
-  if (contentType?.startsWith('image/')) return FaFileImage;
-  if (contentType?.includes('pdf')) return FaFilePdf;
-  if (contentType?.includes('word') || fileName.endsWith('.doc') || fileName.endsWith('.docx')) return FaFileWord;
-  if (contentType?.includes('excel') || fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) return FaFileExcel;
-  if (contentType?.includes('powerpoint') || fileName.endsWith('.ppt') || fileName.endsWith('.pptx')) return FaFilePowerpoint;
-  return FaFileAlt;
-};
-
-// Add helper function to format file size
-const formatFileSize = (bytes: number) => {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-};
 
 const MainPage: React.FC = () => {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -100,29 +42,12 @@ const MainPage: React.FC = () => {
   const [selectedChannel, setSelectedChannel] = useState('general');
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [isInviting, setIsInviting] = useState(false);
-  const [inviteError, setInviteError] = useState('');
-  const [inviteSuccess, setInviteSuccess] = useState('');
+  const [invitedUsers, setInvitedUsers] = useState<string[]>([]);
   const navigate = useNavigate();
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
   const [isInvitedUsersExpanded, setIsInvitedUsersExpanded] = useState(false);
-  const [invitedUsers, setInvitedUsers] = useState<string[]>([]);
   const [channelMembers, setChannelMembers] = useState<ChannelMember[]>([]);
-  const [displayName, setDisplayName] = useState('');
-  const [profilePicture, setProfilePicture] = useState<File | null>(null);
-  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
-  const [profileError, setProfileError] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [usersCache, setUsersCache] = useState<Record<string, UserData>>({});
-  const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
-  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [accountError, setAccountError] = useState('');
-  const [accountSuccess, setAccountSuccess] = useState('');
-  const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [typingUsers, setTypingUsers] = useState<{[key: string]: {displayName: string | null, email: string}}>({});
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
   const [dmUserInfo, setDmUserInfo] = useState<{displayName: string | null, email: string} | null>(null);
@@ -157,8 +82,8 @@ const MainPage: React.FC = () => {
         timestamp: doc.data().timestamp?.toDate() || new Date(),
         channel: doc.data().channel,
         workspaceId: doc.data().workspaceId,
-        reactions: doc.data().reactions || {},  // Include reactions in the message data
-        attachment: doc.data().attachment || null  // Include attachment in the message data
+        reactions: doc.data().reactions || {},
+        attachment: doc.data().attachment || null
       }));
       setMessages(messagesData);
       setLoading(false);
@@ -220,12 +145,6 @@ const MainPage: React.FC = () => {
 
     return () => unsubscribe();
   }, [workspaceId, selectedChannel, auth.currentUser?.email]);
-
-  useEffect(() => {
-    if (auth.currentUser) {
-      setDisplayName(auth.currentUser.displayName || '');
-    }
-  }, []);
 
   useEffect(() => {
     const userIds = new Set(messages.map(msg => msg.sender.uid));
@@ -405,247 +324,37 @@ const MainPage: React.FC = () => {
     }
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
-      minute: '2-digit',
-      hour12: true 
-    });
-  };
+  const handleInviteUser = async (email: string) => {
+    if (!workspaceId || !auth.currentUser || !isEmailVerified) return;
 
-  const shouldShowHeader = (currentMsg: Message, index: number, messages: Message[]) => {
-    if (index === 0) return true;
-    const prevMsg = messages[index - 1];
-    return prevMsg.sender.uid !== currentMsg.sender.uid;
-  };
-
-  const handleInviteUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inviteEmail.trim() || !workspaceId || !auth.currentUser || !isEmailVerified) return;
-
-    setIsInviting(true);
-    setInviteError('');
-    setInviteSuccess('');
-
-    try {
-      // Validate email format
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail.trim())) {
-        setInviteError('Please enter a valid email address');
-        return;
-      }
-
-      const workspaceRef = doc(db, 'workspaces', workspaceId);
-      const workspaceSnap = await getDoc(workspaceRef);
-
-      if (!workspaceSnap.exists()) {
-        setInviteError('Workspace not found');
-        return;
-      }
-
-      const workspaceData = workspaceSnap.data();
-      
-      // Check if user is already a member
-      if (workspaceData.members.includes(inviteEmail.trim())) {
-        setInviteError('User is already a member of this workspace');
-        return;
-      }
-
-      // Check if user is already invited
-      if (workspaceData.invitedEmails?.includes(inviteEmail.trim())) {
-        setInviteError('User has already been invited');
-        return;
-      }
-
-      // Add email to invited list
-      await updateDoc(workspaceRef, {
-        invitedEmails: arrayUnion(inviteEmail.trim())
-      });
-
-      setInviteSuccess('Invitation sent successfully');
-      setInviteEmail('');
-      
-      // Close modal after a short delay
-      setTimeout(() => {
-        const modal = document.getElementById('invite-modal') as HTMLDialogElement;
-        if (modal) modal.close();
-        setInviteSuccess('');
-      }, 2000);
-
-    } catch (error) {
-      console.error('Error inviting user:', error);
-      setInviteError('Failed to send invitation');
-    } finally {
-      setIsInviting(false);
-    }
-  };
-
-  const isDirectMessage = (channelName: string) => {
-    // A channel name that contains @ is an email address, indicating a DM
-    return channelName.includes('@');
-  };
-
-  const handleProfileUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!auth.currentUser) return;
-
-    setIsUpdatingProfile(true);
-    setProfileError('');
-
-    try {
-      let photoURL = auth.currentUser.photoURL;
-
-      // Upload new profile picture if selected
-      if (profilePicture) {
-        const storageRef = ref(storage, `profile_pictures/${auth.currentUser.uid}`);
-        const uploadResult = await uploadBytes(storageRef, profilePicture);
-        photoURL = await getDownloadURL(uploadResult.ref);
-      }
-
-      // Update Auth profile
-      await updateProfile(auth.currentUser, {
-        displayName: displayName.trim() || null,
-        photoURL
-      });
-
-      // Update or create user document in Firestore
-      const userRef = doc(db, 'users', auth.currentUser.uid);
-      const userData = {
-        email: auth.currentUser.email,
-        displayName: displayName.trim() || null,
-        photoURL,
-        updatedAt: serverTimestamp()
-      };
-      await setDoc(userRef, userData, { merge: true });
-
-      // Update local cache immediately
-      const currentUser = auth.currentUser;
-      if (currentUser?.uid) {
-        setUsersCache(prev => ({
-          ...prev,
-          [currentUser.uid]: {
-            email: currentUser.email ?? '',
-            displayName: displayName.trim() || null,
-            photoURL
-          }
-        }));
-      }
-
-      // Update all messages from this user
-      const messagesRef = collection(db, 'messages');
-      const userMessagesQuery = query(
-        messagesRef,
-        where('sender.uid', '==', auth.currentUser.uid)
-      );
-
-      const snapshot = await getDocs(userMessagesQuery);
-      const batch = writeBatch(db);
-
-      snapshot.docs.forEach((doc) => {
-        batch.update(doc.ref, {
-          'sender.displayName': displayName.trim() || null,
-          'sender.photoURL': photoURL
-        });
-      });
-
-      await batch.commit();
-
-      // Close modal
-      const modal = document.getElementById('profile-modal') as HTMLDialogElement;
-      if (modal) modal.close();
-      
-      setProfilePicture(null);
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      setProfileError('Failed to update profile');
-    } finally {
-      setIsUpdatingProfile(false);
-    }
-  };
-
-  const getUserDisplayName = (senderId: string, senderEmail: string, senderDisplayName?: string) => {
-    if (usersCache[senderId]?.displayName) {
-      return usersCache[senderId].displayName;
-    }
-    return senderDisplayName || senderEmail;
-  };
-
-  const getUserPhotoURL = (senderId: string, senderPhotoURL?: string) => {
-    if (usersCache[senderId]?.photoURL) {
-      return usersCache[senderId].photoURL;
-    }
-    return senderPhotoURL;
-  };
-
-  // Add effect to fetch DM user info
-  useEffect(() => {
-    if (!selectedChannel || !isDirectMessage(selectedChannel)) {
-      setDmUserInfo(null);
-      return;
+    // Validate email format
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      throw new Error('Please enter a valid email address');
     }
 
-    const fetchUserInfo = async () => {
-      const usersQuery = query(
-        collection(db, 'users'),
-        where('email', '==', selectedChannel),
-        limit(1)
-      );
-      const userSnapshot = await getDocs(usersQuery);
-      
-      if (!userSnapshot.empty) {
-        const userData = userSnapshot.docs[0].data();
-        setDmUserInfo({
-          displayName: userData.displayName,
-          email: selectedChannel
-        });
-      } else {
-        setDmUserInfo({
-          displayName: null,
-          email: selectedChannel
-        });
-      }
-    };
+    const workspaceRef = doc(db, 'workspaces', workspaceId);
+    const workspaceSnap = await getDoc(workspaceRef);
 
-    fetchUserInfo();
-  }, [selectedChannel]);
+    if (!workspaceSnap.exists()) {
+      throw new Error('Workspace not found');
+    }
 
-  const handleAddReaction = async (messageId: string, emoji: string) => {
-    if (!auth.currentUser || !workspaceId) return;
-
-    const messageRef = doc(db, 'messages', messageId);
-    const messageDoc = await getDoc(messageRef);
+    const workspaceData = workspaceSnap.data();
     
-    if (!messageDoc.exists()) return;
-
-    const currentReactions = messageDoc.data().reactions || {};
-    const currentReaction = currentReactions[emoji] || { emoji, users: [] };
-    const userIndex = currentReaction.users.indexOf(auth.currentUser.uid);
-
-    if (userIndex === -1) {
-      // Add reaction
-      await updateDoc(messageRef, {
-        [`reactions.${emoji}`]: {
-          emoji,
-          users: [...currentReaction.users, auth.currentUser.uid]
-        }
-      });
-    } else {
-      // Remove reaction
-      const updatedUsers = currentReaction.users.filter(uid => uid !== auth.currentUser?.uid);
-      if (updatedUsers.length === 0) {
-        // Remove the entire emoji entry if no users left
-        const { [emoji]: removed, ...remainingReactions } = currentReactions;
-        await updateDoc(messageRef, {
-          reactions: remainingReactions
-        });
-      } else {
-        await updateDoc(messageRef, {
-          [`reactions.${emoji}`]: {
-            emoji,
-            users: updatedUsers
-          }
-        });
-      }
+    // Check if user is already a member
+    if (workspaceData.members.includes(email.trim())) {
+      throw new Error('User is already a member of this workspace');
     }
+
+    // Check if user is already invited
+    if (workspaceData.invitedEmails?.includes(email.trim())) {
+      throw new Error('User has already been invited');
+    }
+
+    // Add email to invited list
+    await updateDoc(workspaceRef, {
+      invitedEmails: arrayUnion(email.trim())
+    });
   };
 
   const handleFileUpload = async (file: File) => {
@@ -743,6 +452,78 @@ const MainPage: React.FC = () => {
     }
   }, [loading]);
 
+  // Add effect to fetch DM user info
+  useEffect(() => {
+    if (!selectedChannel || !isDirectMessage(selectedChannel)) {
+      setDmUserInfo(null);
+      return;
+    }
+
+    const fetchUserInfo = async () => {
+      const usersQuery = query(
+        collection(db, 'users'),
+        where('email', '==', selectedChannel),
+        limit(1)
+      );
+      const userSnapshot = await getDocs(usersQuery);
+      
+      if (!userSnapshot.empty) {
+        const userData = userSnapshot.docs[0].data();
+        setDmUserInfo({
+          displayName: userData.displayName,
+          email: selectedChannel
+        });
+      } else {
+        setDmUserInfo({
+          displayName: null,
+          email: selectedChannel
+        });
+      }
+    };
+
+    fetchUserInfo();
+  }, [selectedChannel]);
+
+  const handleAddReaction = async (messageId: string, emoji: string) => {
+    if (!auth.currentUser || !workspaceId) return;
+
+    const messageRef = doc(db, 'messages', messageId);
+    const messageDoc = await getDoc(messageRef);
+    
+    if (!messageDoc.exists()) return;
+
+    const currentReactions = messageDoc.data().reactions || {};
+    const currentReaction = currentReactions[emoji] || { emoji, users: [] };
+    const userIndex = currentReaction.users.indexOf(auth.currentUser.uid);
+
+    if (userIndex === -1) {
+      // Add reaction
+      await updateDoc(messageRef, {
+        [`reactions.${emoji}`]: {
+          emoji,
+          users: [...currentReaction.users, auth.currentUser.uid]
+        }
+      });
+    } else {
+      // Remove reaction
+      const updatedUsers = currentReaction.users.filter(uid => uid !== auth.currentUser?.uid);
+      if (updatedUsers.length === 0) {
+        // Remove the entire emoji entry if no users left
+        const { [emoji]: removed, ...remainingReactions } = currentReactions;
+        await updateDoc(messageRef, {
+          reactions: remainingReactions
+        });
+      } else {
+        await updateDoc(messageRef, {
+          [`reactions.${emoji}`]: {
+            emoji,
+            users: updatedUsers
+          }
+        });
+      }
+    }
+  };
+
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
@@ -765,18 +546,6 @@ const MainPage: React.FC = () => {
                   <>#{selectedChannel}</>
                 )}
               </h1>
-              <div className="flex items-center gap-2 mt-1">
-                <button 
-                  className="btn btn-ghost btn-sm gap-2"
-                  onClick={() => {
-                    const modal = document.getElementById('files-modal') as HTMLDialogElement;
-                    if (modal) modal.showModal();
-                  }}
-                >
-                  <FaFile className="w-4 h-4" />
-                  <span className="text-sm">Files</span>
-                </button>
-              </div>
             </div>
           </div>
           <div className="flex-none gap-2">
@@ -807,10 +576,9 @@ const MainPage: React.FC = () => {
                 <li>
                   <a onClick={() => {
                     if (auth.currentUser?.email) {
-                      setNewEmail(auth.currentUser.email);
+                      const modal = document.getElementById('account-modal') as HTMLDialogElement;
+                      if (modal) modal.showModal();
                     }
-                    const modal = document.getElementById('account-modal') as HTMLDialogElement;
-                    if (modal) modal.showModal();
                   }} className="relative">
                     Account
                     {!isEmailVerified && (
@@ -834,185 +602,20 @@ const MainPage: React.FC = () => {
               className="absolute inset-0 overflow-y-auto flex flex-col-reverse" 
               style={{ paddingBottom: '130px' }}
             >
-              <div className="p-4">
-                {loading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <span className="loading loading-spinner loading-lg"></span>
-                  </div>
-                ) : messages.filter(m => m.channel === selectedChannel).length === 0 ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="text-center opacity-50">
-                      <div className="text-lg font-semibold">No messages yet</div>
-                      <div className="text-sm">Send the first message to {isDirectMessage(selectedChannel) ? '@' : '#'}{selectedChannel}</div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col space-y-2">
-                    {messages
-                      .filter(m => m.channel === selectedChannel)
-                      .map((msg, index, filteredMessages) => (
-                        <div key={msg.id} className="flex pl-4 group relative hover:bg-base-300/30 rounded-lg transition-colors">
-                          <div className="w-10 flex-shrink-0">
-                            {shouldShowHeader(msg, index, filteredMessages) && (
-                              <div className="avatar">
-                                {getUserPhotoURL(msg.sender.uid, msg.sender.photoURL) ? (
-                                  <div className="w-10 rounded-full">
-                                    <img src={getUserPhotoURL(msg.sender.uid, msg.sender.photoURL) || ''} alt="Profile" />
-                                  </div>
-                                ) : (
-                                  <div className="placeholder">
-                                    <div className="bg-neutral text-neutral-content rounded-full w-10 h-10 flex items-center justify-center">
-                                      <FaUser className="w-6 h-6" />
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0 ml-4">
-                            {shouldShowHeader(msg, index, filteredMessages) && (
-                              <div className="flex items-baseline mb-1">
-                                <span className="font-bold">
-                                  {getUserDisplayName(msg.sender.uid, msg.sender.email, msg.sender.displayName)}
-                                </span>
-                                <time className="text-xs opacity-50 ml-2">
-                                  {formatTime(msg.timestamp)}
-                                </time>
-                              </div>
-                            )}
-                            <div className="text-base-content relative">
-                              <div className="flex items-start">
-                                <div className="flex-1">
-                                  {msg.text}
-                                  {msg.attachment && (
-                                    <div className="mt-2 max-w-2xl">
-                                      {msg.attachment.contentType?.startsWith('image/') ? (
-                                        // Image Preview
-                                        <div className="relative group">
-                                          <img 
-                                            src={msg.attachment.url} 
-                                            alt={msg.attachment.name}
-                                            className="rounded-lg max-h-96 object-contain bg-base-200"
-                                          />
-                                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <div className="join">
-                                              <a 
-                                                href={msg.attachment.url} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                className="btn btn-sm join-item"
-                                                title="View full size"
-                                              >
-                                                <FaExternalLinkAlt />
-                                              </a>
-                                              <a 
-                                                href={msg.attachment.url} 
-                                                download={msg.attachment.name}
-                                                className="btn btn-sm join-item"
-                                                title="Download"
-                                              >
-                                                <FaDownload />
-                                              </a>
-                                            </div>
-                                          </div>
-                                          <div className="mt-1 text-sm opacity-70">
-                                            {msg.attachment.name} • {formatFileSize(msg.attachment.size)}
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        // File Preview
-                                        <div className="bg-base-200 rounded-lg p-4 hover:bg-base-300 transition-colors group">
-                                          <div className="flex items-start gap-4">
-                                            <div className="text-4xl opacity-70">
-                                              {React.createElement(getFileIcon(msg.attachment.name, msg.attachment.contentType))}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                              <div className="font-medium truncate">{msg.attachment.name}</div>
-                                              <div className="text-sm opacity-70">{formatFileSize(msg.attachment.size)}</div>
-                                            </div>
-                                            <div className="join opacity-0 group-hover:opacity-100 transition-opacity">
-                                              <a 
-                                                href={msg.attachment.url} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                className="btn btn-sm join-item"
-                                                title="View"
-                                              >
-                                                <FaExternalLinkAlt />
-                                              </a>
-                                              <a 
-                                                href={msg.attachment.url} 
-                                                download={msg.attachment.name}
-                                                className="btn btn-sm join-item"
-                                                title="Download"
-                                              >
-                                                <FaDownload />
-                                              </a>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Reaction Menu */}
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity items-center gap-2 absolute -top-12 right-8 bg-base-200 rounded-full p-2 shadow-lg z-[10] flex">
-                                {COMMON_EMOJIS.map(emoji => (
-                                  <button
-                                    key={emoji}
-                                    className="btn btn-ghost btn-sm px-2 min-h-0 h-8 flex items-center justify-center hover:bg-base-300"
-                                    onClick={() => handleAddReaction(msg.id, emoji)}
-                                  >
-                                    <span className="text-lg leading-none">{emoji}</span>
-                                  </button>
-                                ))}
-                                <div className="dropdown dropdown-end">
-                                  <label tabIndex={0} className="btn btn-ghost btn-sm px-2 min-h-0 h-8 flex items-center justify-center">
-                                    <FaSmile className="w-5 h-5" />
-                                  </label>
-                                  <div tabIndex={0} className="dropdown-content z-[50] shadow-lg">
-                                    <Picker 
-                                      data={data} 
-                                      onEmojiSelect={(emoji: any) => handleAddReaction(msg.id, emoji.native)}
-                                      theme="dark"
-                                      previewPosition="none"
-                                      skinTonePosition="none"
-                                      searchPosition="none"
-                                      navPosition="none"
-                                      perLine={8}
-                                      maxFrequentRows={0}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Display Reactions */}
-                              {msg.reactions && Object.keys(msg.reactions).length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                  {Object.entries(msg.reactions).map(([emoji, reaction]) => (
-                                    <button
-                                      key={emoji}
-                                      className={`btn btn-ghost !min-h-7 !h-auto py-0.5 gap-1 px-2 flex items-center justify-center ${
-                                        reaction.users.includes(auth.currentUser?.uid || '') ? 'bg-base-300 hover:bg-base-400' : ''
-                                      }`}
-                                      onClick={() => handleAddReaction(msg.id, emoji)}
-                                    >
-                                      <span className="text-base leading-none">{emoji}</span>
-                                      <span className="text-xs leading-none">{reaction.users.length}</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    <div ref={messagesEndRef} />
-                  </div>
-                )}
-              </div>
+              <MessageList 
+                messages={messages.filter(m => m.channel === selectedChannel)}
+                loading={loading}
+                isDirectMessage={isDirectMessage(selectedChannel)}
+                channelName={selectedChannel}
+                getUserDisplayName={(senderId, email, displayName) => getUserDisplayName(senderId, email, usersCache, displayName)}
+                getUserPhotoURL={(senderId, photoURL) => getUserPhotoURL(senderId, usersCache, photoURL)}
+                shouldShowHeader={(msg, index, msgs) => shouldShowHeader(msg.sender.uid, index, msgs.map(m => m.sender.uid))}
+                formatTime={formatTime}
+                handleAddReaction={handleAddReaction}
+                formatFileSize={formatFileSize}
+                getFileIcon={getFileIcon}
+                commonEmojis={COMMON_EMOJIS}
+              />
             </div>
 
             {/* Fixed Message Input */}
@@ -1034,432 +637,60 @@ const MainPage: React.FC = () => {
 
           {/* Right Sidebar */}
           {isRightSidebarOpen && (
-            <div className="w-80 bg-base-300 flex flex-col h-full border-l border-base-content/10 overflow-y-auto z-[20] relative">
-              {/* Add User Widget */}
-              <div className="p-4 border-b border-base-content/10">
-                {!isEmailVerified ? (
-                  <div className="alert alert-warning">
-                    <span>Please verify your email to invite users.</span>
-                  </div>
-                ) : (
-                  <button 
-                    className="btn btn-primary w-full"
-                    onClick={() => {
-                      const modal = document.getElementById('invite-modal') as HTMLDialogElement;
-                      if (modal) modal.showModal();
-                    }}
-                  >
-                    <FaUser className="w-4 h-4 mr-2" />
-                    Add User
-                  </button>
-                )}
-              </div>
-
-              {/* Main Content Area */}
-              <div className="flex-1 overflow-y-auto p-4">
-                {/* Channel Members */}
-                <div className="mb-6">
-                  <h3 className="font-bold mb-4">Channel Members</h3>
-                  <div className="space-y-2">
-                    {channelMembers.length === 0 ? (
-                      <div className="text-sm opacity-50">No members in this channel</div>
-                    ) : (
-                      channelMembers.map((member) => (
-                        <div key={member.uid} className="flex items-center gap-2">
-                          <div className="avatar placeholder">
-                            {member.photoURL ? (
-                              <div className="w-8 h-8 rounded-full">
-                                <img src={member.photoURL} alt="Profile" />
-                              </div>
-                            ) : (
-                              <div className="bg-neutral text-neutral-content rounded-full w-8 h-8 flex items-center justify-center">
-                                <FaUser className="w-4 h-4" />
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="font-medium">
-                              {member.displayName || member.email}
-                              {member.isCurrentUser && " (you)"}
-                            </span>
-                            {member.displayName && (
-                              <span className="text-xs opacity-70">{member.email}</span>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                {/* Invited Users Collapse */}
-                <div className="border-t border-base-content/10 pt-4">
-                  <button
-                    className="w-full py-2 flex items-center justify-between hover:bg-base-200 rounded-lg px-2"
-                    onClick={() => setIsInvitedUsersExpanded(!isInvitedUsersExpanded)}
-                  >
-                    <span className="font-bold">Invited Users</span>
-                    {isInvitedUsersExpanded ? <FaChevronDown /> : <FaChevronRight />}
-                  </button>
-                  {isInvitedUsersExpanded && (
-                    <div className="mt-2 space-y-2">
-                      {invitedUsers.length === 0 ? (
-                        <div className="text-sm opacity-50">No pending invites</div>
-                      ) : (
-                        invitedUsers.map((email, index) => (
-                          <div key={index} className="flex items-center gap-2">
-                            <div className="avatar placeholder">
-                              <div className="bg-neutral text-neutral-content rounded-full w-8 h-8 flex items-center justify-center">
-                                <FaUser className="w-4 h-4" />
-                              </div>
-                            </div>
-                            <span>{email}</span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+            <WorkspaceSidebar
+              isEmailVerified={isEmailVerified}
+              channelMembers={channelMembers}
+              invitedUsers={invitedUsers}
+              isInvitedUsersExpanded={isInvitedUsersExpanded}
+              onInviteClick={() => {
+                const modal = document.getElementById('invite-modal') as HTMLDialogElement;
+                if (modal) modal.showModal();
+              }}
+              onToggleInvitedUsers={() => setIsInvitedUsersExpanded(!isInvitedUsersExpanded)}
+            />
           )}
         </div>
 
-        {/* Invite Modal */}
-        <dialog id="invite-modal" className="modal">
-          <div className="modal-box">
-            <h3 className="font-bold text-lg mb-4">Invite to Workspace</h3>
-            <form onSubmit={handleInviteUser}>
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Email Address</span>
-                </label>
-                <input
-                  type="email"
-                  placeholder="colleague@company.com"
-                  className="input input-bordered w-full"
-                  value={inviteEmail}
-                  onChange={(e) => {
-                    setInviteEmail(e.target.value);
-                    setInviteError('');
-                    setInviteSuccess('');
-                  }}
-                  required
-                />
-              </div>
-              
-              {inviteError && (
-                <div className="alert alert-error mt-4">
-                  <span>{inviteError}</span>
-                </div>
-              )}
-              
-              {inviteSuccess && (
-                <div className="alert alert-success mt-4">
-                  <span>{inviteSuccess}</span>
-                </div>
-              )}
+        {/* Modals */}
+        <InviteModal onInvite={handleInviteUser} />
+        <ProfileModal 
+          user={auth.currentUser} 
+          onUpdateProfile={(displayName, profilePicture) => handleProfileUpdate(auth.currentUser!, displayName, profilePicture, setUsersCache)} 
+        />
+        <AccountModal 
+          user={auth.currentUser}
+          isEmailVerified={isEmailVerified}
+          onUpdateEmail={(newEmail, currentPassword) => {
+            if (!auth.currentUser) return Promise.reject(new Error('No user logged in'));
+            return handleEmailUpdate(auth.currentUser, newEmail, currentPassword);
+          }}
+          onUpdatePassword={(newPassword, currentPassword) => {
+            if (!auth.currentUser) return Promise.reject(new Error('No user logged in'));
+            return handlePasswordUpdate(auth.currentUser, newPassword, currentPassword);
+          }}
+          onResendVerification={() => {
+            if (!auth.currentUser) return Promise.reject(new Error('No user logged in'));
+            return handleResendVerification(auth.currentUser);
+          }}
+        />
+        <FileUploadModal
+          selectedFile={selectedFile}
+          onFileSelect={setSelectedFile}
+          onFileUpload={handleFileUpload}
+          onClose={() => {
+            const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
+            if (modal) modal.close();
+            setSelectedFile(null);
+          }}
+        />
 
-              <div className="modal-action">
-                <button 
-                  type="button" 
-                  className="btn" 
-                  onClick={() => {
-                    const modal = document.getElementById('invite-modal') as HTMLDialogElement;
-                    if (modal) modal.close();
-                    setInviteEmail('');
-                    setInviteError('');
-                    setInviteSuccess('');
-                  }}
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit" 
-                  className={`btn btn-primary ${isInviting ? 'loading' : ''}`}
-                  disabled={isInviting || !inviteEmail.trim()}
-                >
-                  {isInviting ? 'Inviting...' : 'Send Invite'}
-                </button>
-              </div>
-            </form>
-          </div>
-          <form method="dialog" className="modal-backdrop">
-            <button>close</button>
-          </form>
-        </dialog>
-
-        {/* Profile Modal */}
-        <dialog id="profile-modal" className="modal">
-          <div className="modal-box">
-            <h3 className="font-bold text-lg mb-4">Edit Profile</h3>
-            <form onSubmit={handleProfileUpdate}>
-              <div className="form-control mb-4">
-                <div className="flex flex-col items-center mb-4">
-                  <div className="avatar placeholder cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                    <div className="bg-neutral text-neutral-content rounded-full w-24 h-24 relative flex items-center justify-center">
-                      {profilePicture ? (
-                        <img
-                          src={URL.createObjectURL(profilePicture)}
-                          alt="Profile preview"
-                          className="w-full h-full object-cover rounded-full"
-                        />
-                      ) : auth.currentUser?.photoURL ? (
-                        <img
-                          src={auth.currentUser.photoURL}
-                          alt="Current profile"
-                          className="w-full h-full object-cover rounded-full"
-                        />
-                      ) : (
-                        <FaUser className="w-12 h-12" />
-                      )}
-                      <div className="absolute bottom-0 right-0 bg-base-100 rounded-full p-2">
-                        <FaCamera className="w-4 h-4" />
-                      </div>
-                    </div>
-                  </div>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    ref={fileInputRef}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) setProfilePicture(file);
-                    }}
-                  />
-                </div>
-
-                <label className="label">
-                  <span className="label-text">Display Name</span>
-                </label>
-            <input
-              type="text"
-                  placeholder="Your name"
-                  className="input input-bordered w-full"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                />
-              </div>
-              
-              {profileError && (
-                <div className="alert alert-error mb-4">
-                  <span>{profileError}</span>
-                </div>
-              )}
-
-              <div className="modal-action">
-                <button 
-                  type="button" 
-                  className="btn" 
-                  onClick={() => {
-                    const modal = document.getElementById('profile-modal') as HTMLDialogElement;
-                    if (modal) modal.close();
-                    setProfilePicture(null);
-                    setProfileError('');
-                  }}
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit" 
-                  className={`btn btn-primary ${isUpdatingProfile ? 'loading' : ''}`}
-                  disabled={isUpdatingProfile}
-                >
-                  {isUpdatingProfile ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
-          </div>
-          <form method="dialog" className="modal-backdrop">
-            <button>close</button>
-          </form>
-        </dialog>
-
-        {/* Account Settings Modal */}
-        <dialog id="account-modal" className="modal">
-          <div className="modal-box">
-            <h3 className="font-bold text-lg mb-4">Account Settings</h3>
-            
-            {/* Email Change Section */}
-            <div className="form-control mb-6">
-              <h4 className="font-semibold mb-2">Email Settings</h4>
-              {auth.currentUser?.emailVerified ? (
-                <form onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!auth.currentUser || !currentPassword) return;
-
-                  setIsUpdatingEmail(true);
-                  setAccountError('');
-                  setAccountSuccess('');
-
-                  try {
-                    // Re-authenticate user
-                    const credential = EmailAuthProvider.credential(
-                      auth.currentUser.email!,
-                      currentPassword
-                    );
-                    await reauthenticateWithCredential(auth.currentUser, credential);
-                    
-                    // Update email
-                    await updateEmail(auth.currentUser, newEmail);
-                    
-                    setAccountSuccess('Email updated successfully');
-                    setCurrentPassword('');
-                  } catch (error: any) {
-                    console.error('Error updating email:', error);
-                    setAccountError(error.message || 'Failed to update email');
-                  } finally {
-                    setIsUpdatingEmail(false);
-                  }
-                }}>
-                  <input
-                    type="email"
-                    placeholder="New Email"
-                    className="input input-bordered w-full mb-2"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    required
-                  />
-                  <input
-                    type="password"
-                    placeholder="Current Password"
-                    className="input input-bordered w-full mb-2"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    required
-                  />
-                  <button 
-                    type="submit" 
-                    className={`btn btn-primary w-full ${isUpdatingEmail ? 'loading' : ''}`}
-                    disabled={isUpdatingEmail || !newEmail.trim() || !currentPassword.trim()}
-                  >
-                    Update Email
-                  </button>
-                </form>
-              ) : (
-                <div className="space-y-4">
-                  <div className="alert alert-warning">
-                    <span>Your email ({auth.currentUser?.email}) is not verified. Please verify your email before making changes.</span>
-                  </div>
-                  <button 
-                    className={`btn btn-primary w-full ${isResendingVerification ? 'loading' : ''}`}
-                    onClick={async () => {
-                      if (!auth.currentUser) return;
-                      
-                      setIsResendingVerification(true);
-                      setAccountError('');
-                      setAccountSuccess('');
-                      
-                      try {
-                        await sendEmailVerification(auth.currentUser);
-                        setAccountSuccess('Verification email sent! Please check your inbox.');
-                      } catch (error: any) {
-                        console.error('Error sending verification email:', error);
-                        setAccountError(error.message || 'Failed to send verification email');
-                      } finally {
-                        setIsResendingVerification(false);
-                      }
-                    }}
-                    disabled={isResendingVerification}
-                  >
-                    {isResendingVerification ? 'Sending...' : 'Resend Verification Email'}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Password Change Section */}
-            <div className="form-control mb-6">
-              <h4 className="font-semibold mb-2">Change Password</h4>
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                if (!auth.currentUser || !currentPassword) return;
-
-                setIsUpdatingPassword(true);
-                setAccountError('');
-                setAccountSuccess('');
-
-                try {
-                  // Re-authenticate user
-                  const credential = EmailAuthProvider.credential(
-                    auth.currentUser.email!,
-                    currentPassword
-                  );
-                  await reauthenticateWithCredential(auth.currentUser, credential);
-                  
-                  // Update password
-                  await updatePassword(auth.currentUser, newPassword);
-                  
-                  setAccountSuccess('Password updated successfully');
-                  setCurrentPassword('');
-                  setNewPassword('');
-                } catch (error: any) {
-                  console.error('Error updating password:', error);
-                  setAccountError(error.message || 'Failed to update password');
-                } finally {
-                  setIsUpdatingPassword(false);
-                }
-              }}>
-                <input
-                  type="password"
-                  placeholder="Current Password"
-                  className="input input-bordered w-full mb-2"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  required
-                />
-                <input
-                  type="password"
-                  placeholder="New Password"
-                  className="input input-bordered w-full mb-2"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                  minLength={6}
-                />
-                <button 
-                  type="submit" 
-                  className={`btn btn-primary w-full ${isUpdatingPassword ? 'loading' : ''}`}
-                  disabled={isUpdatingPassword || !newPassword.trim() || !currentPassword.trim()}
-                >
-                  Update Password
-                </button>
-              </form>
-            </div>
-
-            {accountError && (
-              <div className="alert alert-error mb-4">
-                <span>{accountError}</span>
-              </div>
-            )}
-            
-            {accountSuccess && (
-              <div className="alert alert-success mb-4">
-                <span>{accountSuccess}</span>
-              </div>
-            )}
-
-            <div className="modal-action">
-              <button 
-                className="btn" 
-                onClick={() => {
-                  const modal = document.getElementById('account-modal') as HTMLDialogElement;
-                  if (modal) modal.close();
-                  setCurrentPassword('');
-                  setNewPassword('');
-                  setAccountError('');
-                  setAccountSuccess('');
-                }}
-              >
-                Close
-            </button>
-            </div>
-          </div>
-          <form method="dialog" className="modal-backdrop">
-            <button>close</button>
-        </form>
-        </dialog>
+        {/* Files Modal */}
+        <FileListModal 
+          messages={messages.filter(m => m.channel === selectedChannel && m.attachment)}
+          fileSearchQuery={fileSearchQuery}
+          onSearchChange={(query) => setFileSearchQuery(query)}
+          getUserDisplayName={(senderId, email, displayName) => getUserDisplayName(senderId, email, usersCache, displayName)}
+        />
       </div>
 
       {/* Sidebar */}
@@ -1471,214 +702,6 @@ const MainPage: React.FC = () => {
           selectedChannel={selectedChannel}
         />
       </div>
-
-      {/* File Upload Modal */}
-      <dialog id="file-upload-modal" className="modal">
-        <div className="modal-box">
-          <h3 className="font-bold text-lg mb-4">Upload File</h3>
-          <div className="form-control">
-            {selectedFile ? (
-              <div className="flex flex-col items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <FaFile className="w-8 h-8" />
-                  <div>
-                    <div className="font-medium">{selectedFile.name}</div>
-                    <div className="text-sm opacity-70">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</div>
-                  </div>
-                </div>
-                <button 
-                  className="btn btn-primary w-full"
-                  onClick={() => handleFileUpload(selectedFile)}
-                >
-                  Send File
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-4">
-                <label className="w-full cursor-pointer">
-                  <input
-                    type="file"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) setSelectedFile(file);
-                    }}
-                  />
-                  <div className="border-2 border-dashed border-base-content/20 rounded-lg p-8 text-center hover:border-base-content/40 transition-colors">
-                    <FaFile className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <div className="font-medium">Click to select a file</div>
-                    <div className="text-sm opacity-70">or drag and drop</div>
-                  </div>
-                </label>
-              </div>
-            )}
-          </div>
-          <div className="modal-action">
-            <button 
-              className="btn" 
-              onClick={() => {
-                const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
-                if (modal) modal.close();
-                setSelectedFile(null);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          <button>close</button>
-        </form>
-      </dialog>
-
-      {/* Files Modal */}
-      <dialog id="files-modal" className="modal">
-        <div className="modal-box max-w-4xl">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-lg">Channel Files</h3>
-            <div className="join">
-              <input
-                type="text"
-                placeholder="Search files..."
-                className="input input-bordered join-item w-64"
-                value={fileSearchQuery}
-                onChange={(e) => setFileSearchQuery(e.target.value)}
-              />
-              <button className="btn join-item">
-                <FaSearch className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-          <div className="overflow-y-auto max-h-[60vh]">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-h-[50vh]">
-              {messages
-                .filter(m => m.channel === selectedChannel && m.attachment)
-                .filter(m => {
-                  if (!fileSearchQuery) return true;
-                  const searchLower = fileSearchQuery.toLowerCase();
-                  const fileName = m.attachment?.name.toLowerCase() || '';
-                  const fileType = m.attachment?.contentType?.toLowerCase() || '';
-                  const sharedBy = getUserDisplayName(m.sender.uid, m.sender.email, m.sender.displayName).toLowerCase();
-                  const date = m.timestamp.toLocaleDateString().toLowerCase();
-                  return fileName.includes(searchLower) || 
-                         fileType.includes(searchLower) || 
-                         sharedBy.includes(searchLower) ||
-                         date.includes(searchLower);
-                })
-                .map((msg) => (
-                  <div key={msg.id} className="card bg-base-200">
-                    <div className="card-body p-4">
-                      {msg.attachment?.contentType?.startsWith('image/') ? (
-                        // Image Preview
-                        <figure className="relative group">
-                          <img 
-                            src={msg.attachment.url} 
-                            alt={msg.attachment.name}
-                            className="rounded-lg w-full h-32 object-cover"
-                          />
-                          <div className="absolute inset-0 bg-base-300/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                            <a 
-                              href={msg.attachment.url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="btn btn-sm btn-ghost"
-                              title="View full size"
-                            >
-                              <FaExternalLinkAlt />
-                            </a>
-                            <a 
-                              href={msg.attachment.url} 
-                              download={msg.attachment.name}
-                              className="btn btn-sm btn-ghost"
-                              title="Download"
-                            >
-                              <FaDownload />
-                            </a>
-                          </div>
-                        </figure>
-                      ) : (
-                        // File Preview
-                        <div className="flex items-start gap-4">
-                          <div className="text-3xl opacity-70">
-                            {React.createElement(getFileIcon(msg.attachment?.name || '', msg.attachment?.contentType))}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">{msg.attachment?.name}</div>
-                            <div className="text-sm opacity-70">{formatFileSize(msg.attachment?.size || 0)}</div>
-                            <div className="mt-2 flex gap-2">
-                              <a 
-                                href={msg.attachment?.url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="btn btn-sm btn-ghost"
-                                title="View"
-                              >
-                                <FaExternalLinkAlt />
-                              </a>
-                              <a 
-                                href={msg.attachment?.url} 
-                                download={msg.attachment?.name}
-                                className="btn btn-sm btn-ghost"
-                                title="Download"
-                              >
-                                <FaDownload />
-                              </a>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      <div className="text-xs opacity-70 mt-2">
-                        Shared by {getUserDisplayName(msg.sender.uid, msg.sender.email, msg.sender.displayName)} on {msg.timestamp.toLocaleDateString()}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-              {/* Show when there are no files at all */}
-              {messages.filter(m => m.channel === selectedChannel && m.attachment).length === 0 && (
-                <div className="col-span-full flex items-center justify-center h-full">
-                  <div className="text-center opacity-50">
-                    <FaFile className="w-12 h-12 mx-auto mb-2" />
-                    <div className="text-lg font-semibold">No files shared yet</div>
-                    <div className="text-sm">Files shared in this channel will appear here</div>
-                  </div>
-                </div>
-              )}
-
-              {/* Show when there are files but none match the search */}
-              {fileSearchQuery && messages
-                .filter(m => m.channel === selectedChannel && m.attachment)
-                .filter(m => {
-                  const searchLower = fileSearchQuery.toLowerCase();
-                  const fileName = m.attachment?.name.toLowerCase() || '';
-                  const fileType = m.attachment?.contentType?.toLowerCase() || '';
-                  const sharedBy = getUserDisplayName(m.sender.uid, m.sender.email, m.sender.displayName).toLowerCase();
-                  const date = m.timestamp.toLocaleDateString().toLowerCase();
-                  return fileName.includes(searchLower) || 
-                         fileType.includes(searchLower) || 
-                         sharedBy.includes(searchLower) ||
-                         date.includes(searchLower);
-                }).length === 0 && (
-                <div className="col-span-full flex items-center justify-center h-full">
-                  <div className="text-center opacity-50">
-                    <FaSearch className="w-12 h-12 mx-auto mb-2" />
-                    <div className="text-lg font-semibold">No matching files</div>
-                    <div className="text-sm">Try adjusting your search terms</div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="modal-action">
-            <form method="dialog">
-              <button className="btn">Close</button>
-            </form>
-          </div>
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          <button>close</button>
-        </form>
-      </dialog>
     </div>
   );
 };
