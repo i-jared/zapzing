@@ -29,7 +29,7 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { Message, UserData, ChannelMember } from '../types/chat';
+import { Message, UserData, ChannelMember, Channel, FirestoreChannel } from '../types/chat';
 import { formatTime, shouldShowHeader, isDirectMessage, formatFileSize, getFileIcon, updateLastSeen } from '../utils/chat';
 import { getUserDisplayName, getUserPhotoURL, setGlobalUsersCache } from '../utils/user';
 import { handleProfileUpdate, handleEmailUpdate, handlePasswordUpdate, handleResendVerification } from '../utils/auth';
@@ -41,7 +41,7 @@ const COMMON_EMOJIS = ['👍', '❤️', '😂', '🎉', '🚀'];
 const MainPage: React.FC = () => {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const [message, setMessage] = useState('');
-  const [selectedChannel, setSelectedChannel] = useState('general');
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [invitedUsers, setInvitedUsers] = useState<string[]>([]);
@@ -52,7 +52,6 @@ const MainPage: React.FC = () => {
   const [usersCache, setUsersCache] = useState<Record<string, UserData>>({});
   const [typingUsers, setTypingUsers] = useState<{[key: string]: {displayName: string | null, email: string}}>({});
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
-  const [dmUserInfo, setDmUserInfo] = useState<{displayName: string | null, email: string} | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileSearchQuery, setFileSearchQuery] = useState('');
   const [linkSearchQuery, setLinkSearchQuery] = useState('');
@@ -93,102 +92,32 @@ const MainPage: React.FC = () => {
       return;
     }
 
-    const currentUserUid = auth.currentUser.uid;
-    let unsubscribe: () => void = () => {};
+    // Set initial channel to 'general'
+    const channelsRef = collection(db, 'channels');
+    const generalChannelQuery = query(
+      channelsRef,
+      where('workspaceId', '==', workspaceId),
+      where('name', '==', 'general'),
+      limit(1)
+    );
 
-    // Subscribe to messages collection for this workspace
-    const messagesRef = collection(db, 'messages');
-
-    if (isDirectMessage(selectedChannel)) {
-      // If it's an email, look up the UID first
-      if (selectedChannel.includes('@')) {
-        // Look up the UID first
-        getDocs(query(collection(db, 'users'), where('email', '==', selectedChannel)))
-          .then(snapshot => {
-            if (!snapshot.empty) {
-              const otherUserUid = snapshot.docs[0].id;
-              const dmQuery = query(
-                messagesRef,
-                where('workspaceId', '==', workspaceId),
-                orderBy('timestamp', 'asc')
-              );
-              
-              unsubscribe = setupMessageListener(dmQuery, currentUserUid, otherUserUid);
-            }
-          });
-      } else {
-        // We already have the UID
-        const dmQuery = query(
-          messagesRef,
-          where('workspaceId', '==', workspaceId),
-          orderBy('timestamp', 'asc')
-        );
-        
-        unsubscribe = setupMessageListener(dmQuery, currentUserUid, selectedChannel);
+    getDocs(generalChannelQuery).then((snapshot) => {
+      if (!snapshot.empty) {
+        const generalChannel = snapshot.docs[0];
+        const data = generalChannel.data() as FirestoreChannel;
+        const createdAt = 'toDate' in data.createdAt ? data.createdAt.toDate() : new Date(data.createdAt.seconds * 1000);
+        setSelectedChannel({
+          id: generalChannel.id,
+          name: data.name,
+          workspaceId: data.workspaceId,
+          createdAt,
+          dm: data.dm
+        });
       }
-    } else {
-      // For channels, keep the existing behavior
-      const channelQuery = query(
-        messagesRef,
-        where('workspaceId', '==', workspaceId),
-        where('channel', '==', selectedChannel),
-        orderBy('timestamp', 'asc')
-      );
-      
-      unsubscribe = setupMessageListener(channelQuery);
-    }
+    });
 
-    function setupMessageListener(query: any, currentUid?: string, otherUid?: string) {
-      return onSnapshot(query, (snapshot) => {
-        const messagesData = snapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            text: data.text,
-            sender: data.sender,
-            timestamp: data.timestamp?.toDate() || new Date(),
-            channel: data.channel,
-            workspaceId: data.workspaceId,
-            reactions: data.reactions || {},
-            attachment: data.attachment || null,
-            replyTo: data.replyTo || null,
-            replyCount: snapshot.docs.filter(m => 
-              m.data().replyTo?.messageId === doc.id
-            ).length
-          };
-        });
-
-        // Filter messages
-        const filteredMessages = messagesData.filter(msg => {
-          if (currentUid && otherUid) {
-            // For DMs, show messages between the two users where:
-            // 1. Current user sent to other user (channel is other's UID) OR
-            // 2. Other user sent to current user (channel is current's UID)
-            return (
-              (msg.sender.uid === currentUid && msg.channel === otherUid) ||
-              (msg.sender.uid === otherUid && msg.channel === currentUid)
-            );
-          } else {
-            // For channels, show all messages in this channel
-            return msg.channel === selectedChannel;
-          }
-        });
-
-        // Sort messages by timestamp
-        const sortedMessages = filteredMessages.sort((a, b) => 
-          a.timestamp.getTime() - b.timestamp.getTime()
-        );
-
-        setMessages(sortedMessages);
-        setLoading(false);
-      }, (error) => {
-        console.error("Error fetching messages:", error);
-        setLoading(false);
-      });
-    }
-
-    return () => unsubscribe();
-  }, [workspaceId, navigate, selectedChannel, auth.currentUser?.email]);
+    return () => {};
+  }, [workspaceId, navigate, auth.currentUser?.email]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -205,41 +134,57 @@ const MainPage: React.FC = () => {
   }, [workspaceId]);
 
   useEffect(() => {
-    if (!workspaceId || !selectedChannel || !auth.currentUser?.email) return;
+    if (!workspaceId || !selectedChannel?.id || !auth.currentUser?.email) return;
 
-    // Fetch channel members
-    const workspaceRef = doc(db, 'workspaces', workspaceId);
-    const unsubscribe = onSnapshot(workspaceRef, async (doc) => {
-      if (doc.exists()) {
-        const workspaceData = doc.data();
-        const allMembers = workspaceData.members || [];
-        
-        // Fetch user data for each member
-        const memberPromises = allMembers.map(async (email: string) => {
-          const usersQuery = query(
-            collection(db, 'users'),
-            where('email', '==', email),
-            limit(1)
-          );
-          const userSnapshot = await getDocs(usersQuery);
-          const userData = userSnapshot.docs[0]?.data();
-          
-          return {
-            uid: email,
-            email: email,
-            isCurrentUser: email === auth.currentUser?.email,
-            displayName: userData?.displayName || null,
-            photoURL: userData?.photoURL || null
-          };
+    console.log('Setting up message subscription for channel:', selectedChannel);
+
+    // If it's a temporary DM channel, don't try to fetch messages yet
+    if (selectedChannel.id.startsWith('temp_dm_')) {
+        console.log('Temporary DM channel, clearing messages');
+        setMessages([]);
+        setLoading(false);
+        return;
+    }
+
+    // Subscribe to messages collection for this workspace
+    const messagesRef = collection(db, 'messages');
+    const messagesQuery = query(
+        messagesRef,
+        where('workspaceId', '==', workspaceId),
+        where('channel', '==', selectedChannel.id),
+        orderBy('timestamp', 'asc')
+    );
+
+    console.log('Setting up message listener');
+    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+        console.log('Received message update:', snapshot.docs.length, 'messages');
+        const messagesData = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                text: data.text,
+                sender: data.sender,
+                timestamp: data.timestamp?.toDate() || new Date(),
+                channel: data.channel,
+                workspaceId: data.workspaceId,
+                reactions: data.reactions || {},
+                attachment: data.attachment || null,
+                replyTo: data.replyTo || null,
+                replyCount: snapshot.docs.filter(m => 
+                    m.data().replyTo?.messageId === doc.id
+                ).length
+            };
         });
 
-        const members = await Promise.all(memberPromises);
-        setChannelMembers(members);
-      }
+        setMessages(messagesData);
+        setLoading(false);
+    }, (error) => {
+        console.error("Error fetching messages:", error);
+        setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [workspaceId, selectedChannel, auth.currentUser?.email]);
+  }, [workspaceId, selectedChannel?.id, auth.currentUser?.email]);
 
   useEffect(() => {
     const userIds = new Set(messages.map(msg => msg.sender.uid));
@@ -305,13 +250,14 @@ const MainPage: React.FC = () => {
 
   // Add effect to listen for typing users
   useEffect(() => {
-    if (!workspaceId || !selectedChannel) return;
+    if (!workspaceId || !selectedChannel?.id || !auth.currentUser?.email) return;
 
+    // Subscribe to typing status
     const typingRef = collection(db, 'typing');
     const q = query(
       typingRef,
       where('workspaceId', '==', workspaceId),
-      where('channel', '==', selectedChannel)
+      where('channel', '==', selectedChannel.id)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -339,11 +285,11 @@ const MainPage: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, [workspaceId, selectedChannel]);
+  }, [workspaceId, selectedChannel?.id, auth.currentUser?.uid]);
 
   // Add function to handle typing status
   const handleTypingStatus = useCallback(async () => {
-    if (!auth.currentUser || !workspaceId || !selectedChannel) return;
+    if (!auth.currentUser || !workspaceId || !selectedChannel?.id) return;
 
     const typingRef = doc(db, 'typing', auth.currentUser.uid);
     const userActivityRef = doc(db, 'userActivity', auth.currentUser.uid);
@@ -357,7 +303,7 @@ const MainPage: React.FC = () => {
     await Promise.all([
       setDoc(typingRef, {
         isTyping: true,
-        channel: selectedChannel,
+        channel: selectedChannel.id,
         workspaceId,
         timestamp: serverTimestamp(),
         displayName: auth.currentUser.displayName,
@@ -376,14 +322,14 @@ const MainPage: React.FC = () => {
       
       await setDoc(typingRef, {
         isTyping: false,
-        channel: selectedChannel,
+        channel: selectedChannel.id,
         workspaceId,
         timestamp: serverTimestamp(),
         displayName: auth.currentUser?.displayName || null,
         email: auth.currentUser?.email || null
       });
     }, 5000);
-  }, [workspaceId, selectedChannel]);
+  }, [workspaceId, selectedChannel?.id]);
 
   // Update message input handler to use debounced typing status
   const handleMessageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -402,63 +348,55 @@ const MainPage: React.FC = () => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || !auth.currentUser || !workspaceId || !isEmailVerified) return;
+    if (!message.trim() || !auth.currentUser || !workspaceId || !selectedChannel || !isEmailVerified) return;
 
     try {
-      const messagesRef = collection(db, 'messages');
-      let recipientUid: string | null = null;
+        const messagesRef = collection(db, 'messages');
+        let channelId = selectedChannel.id;
 
-      // If it's a DM and we have an email, look up the UID
-      if (isDirectMessage(selectedChannel) && selectedChannel.includes('@')) {
-        const userSnapshot = await getDocs(query(
-          collection(db, 'users'), 
-          where('email', '==', selectedChannel),
-          limit(1)
-        ));
-        
-        if (userSnapshot.empty) {
-          console.error('User not found');
-          return;
+        // If this is a temporary DM channel, create the real channel first
+        if (selectedChannel.id.startsWith('temp_dm_')) {
+            const channelsRef = collection(db, 'channels');
+            const dmDoc = await addDoc(channelsRef, {
+                name: selectedChannel.name,
+                workspaceId,
+                createdAt: serverTimestamp(),
+                dm: selectedChannel.dm
+            });
+            channelId = dmDoc.id;
+
+            // Update the selected channel with the real channel ID
+            setSelectedChannel({
+                ...selectedChannel,
+                id: channelId
+            });
         }
-        
-        // Use the document ID as the UID
-        recipientUid = userSnapshot.docs[0].id;
-      } else if (isDirectMessage(selectedChannel)) {
-        // If it's a DM but not an email, assume it's already a UID
-        recipientUid = selectedChannel;
-      } else {
-        // For channels, use the channel name
-        recipientUid = selectedChannel;
-      }
 
-      // Only proceed if we have a valid channel/recipient
-      if (!recipientUid) {
-        console.error('No valid recipient found');
-        return;
-      }
+        const messageData = {
+            text: message.trim(),
+            sender: {
+                uid: auth.currentUser.uid,
+                email: auth.currentUser.email,
+                displayName: auth.currentUser.displayName,
+                photoURL: auth.currentUser.photoURL
+            },
+            timestamp: serverTimestamp(),
+            channel: channelId,
+            workspaceId,
+            ...(replyingTo ? {
+                replyTo: {
+                    messageId: replyingTo.messageId,
+                    threadId: replyingTo.messageId,
+                    senderName: replyingTo.senderName
+                }
+            } : {})
+        };
 
-      const messageData = {
-        text: message.trim(),
-        sender: {
-          uid: auth.currentUser.uid
-        },
-        timestamp: serverTimestamp(),
-        channel: recipientUid,
-        workspaceId,
-        ...(replyingTo ? {
-          replyTo: {
-            messageId: replyingTo.messageId,
-            threadId: replyingTo.messageId,
-            senderName: replyingTo.senderName
-          }
-        } : {})
-      };
-
-      await addDoc(messagesRef, messageData);
-      setMessage('');
-      setReplyingTo(null);
+        await addDoc(messagesRef, messageData);
+        setMessage('');
+        setReplyingTo(null);
     } catch (error) {
-      console.error('Error sending message:', error);
+        console.error('Error sending message:', error);
     }
   };
 
@@ -496,7 +434,7 @@ const MainPage: React.FC = () => {
   };
 
   const handleFileUpload = async (file: File) => {
-    if (!auth.currentUser || !workspaceId) return;
+    if (!auth.currentUser || !workspaceId || !selectedChannel) return;
 
     try {
       // Upload file to Firebase Storage
@@ -515,7 +453,7 @@ const MainPage: React.FC = () => {
           photoURL: auth.currentUser.photoURL
         },
         timestamp: serverTimestamp(),
-        channel: selectedChannel,
+        channel: selectedChannel.id,
         workspaceId,
         attachment: {
           type: 'file',
@@ -593,37 +531,12 @@ const MainPage: React.FC = () => {
   // Add effect to fetch DM user info
   useEffect(() => {
     if (!selectedChannel || !isDirectMessage(selectedChannel)) {
-      setDmUserInfo(null);
       return;
     }
-
-    const fetchUserInfo = async () => {
-      const usersQuery = query(
-        collection(db, 'users'),
-        where('email', '==', selectedChannel),
-        limit(1)
-      );
-      const userSnapshot = await getDocs(usersQuery);
-      
-      if (!userSnapshot.empty) {
-        const userData = userSnapshot.docs[0].data();
-        setDmUserInfo({
-          displayName: userData.displayName,
-          email: selectedChannel
-        });
-      } else {
-        setDmUserInfo({
-          displayName: null,
-          email: selectedChannel
-        });
-      }
-    };
-
-    fetchUserInfo();
   }, [selectedChannel]);
 
   const handleAddReaction = async (messageId: string, emoji: string) => {
-    if (!auth.currentUser || !workspaceId) return;
+    if (!auth.currentUser || !workspaceId || !selectedChannel?.id) return;
 
     const messageRef = doc(db, 'messages', messageId);
     const messageDoc = await getDoc(messageRef);
@@ -662,7 +575,7 @@ const MainPage: React.FC = () => {
     }
   };
 
-  const handleReply = (messageId: string) => {
+  const handleReply = async (messageId: string) => {
     // If clicking on the same message that's being replied to, cancel the reply
     if (replyingTo?.messageId === messageId) {
       setReplyingTo(null);
@@ -701,11 +614,14 @@ const MainPage: React.FC = () => {
 
   // Add function to handle thread opening
   const handleOpenThread = async (messageId: string) => {
+    if (!workspaceId || !selectedChannel?.id) return;
+
     // Get all replies for this message
-      const messagesRef = collection(db, 'messages');
+    const messagesRef = collection(db, 'messages');
     const repliesQuery = query(
       messagesRef,
       where('workspaceId', '==', workspaceId),
+      where('channel', '==', selectedChannel.id),
       where('replyTo.messageId', '==', messageId),
       orderBy('timestamp', 'asc')
     );
@@ -754,44 +670,17 @@ const MainPage: React.FC = () => {
 
   const handleThreadSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!threadMessage.trim() || !auth.currentUser || !workspaceId || !isEmailVerified || !selectedThread) return;
+    if (!threadMessage.trim() || !auth.currentUser || !workspaceId || !isEmailVerified || !selectedThread || !selectedChannel) return;
 
     try {
       const messagesRef = collection(db, 'messages');
-      let recipientUid: string | null = null;
-
-      // If it's a DM and we have an email, look up the UID
-      if (isDirectMessage(selectedChannel) && selectedChannel.includes('@')) {
-        const userSnapshot = await getDocs(query(
-          collection(db, 'users'), 
-          where('email', '==', selectedChannel),
-          limit(1)
-        ));
-        
-        if (userSnapshot.empty) {
-          console.error('User not found');
-          return;
-        }
-        
-        recipientUid = userSnapshot.docs[0].id;
-      } else if (isDirectMessage(selectedChannel)) {
-        recipientUid = selectedChannel;
-      } else {
-        recipientUid = selectedChannel;
-      }
-
-      if (!recipientUid) {
-        console.error('No valid recipient found');
-        return;
-      }
-
       const messageData = {
         text: threadMessage.trim(),
         sender: {
           uid: auth.currentUser.uid
         },
         timestamp: serverTimestamp(),
-        channel: recipientUid,
+        channel: selectedChannel.id,
         workspaceId,
         replyTo: {
           messageId: selectedThread.messageId,
@@ -822,8 +711,8 @@ const MainPage: React.FC = () => {
     }
 
     // Debounce search for 300ms
-    searchTimeoutRef.current = setTimeout(() => {
-      if (!query.trim()) {
+    searchTimeoutRef.current = setTimeout(async () => {
+      if (!query.trim() || !selectedChannel?.id) {
         setSearchResults([]);
         setIsSearching(false);
         return;
@@ -839,16 +728,16 @@ const MainPage: React.FC = () => {
         .map(msg => ({
           message: msg,
           preview: msg.text.length > 100 ? msg.text.slice(0, 100) + '...' : msg.text,
-          context: isDirectMessage(msg.channel) ? 
-            `DM with ${getUserDisplayName(msg.sender.uid, msg.sender.email, msg.sender.displayName)}` : 
-            `#${msg.channel}${msg.replyTo ? ' (in thread)' : ''}`
+          context: selectedChannel.dm ? 
+            `DM with ${selectedChannel.name}` : 
+            `#${selectedChannel.name}${msg.replyTo ? ' (in thread)' : ''}`
         }))
         .slice(0, 5); // Limit to 5 results
 
       setSearchResults(results);
       setIsSearching(false);
     }, 300);
-  }, [messages, usersCache]);
+  }, [messages, selectedChannel]);
 
   // Add effect to handle scrolling to message
   useEffect(() => {
@@ -867,8 +756,21 @@ const MainPage: React.FC = () => {
 
   // Update search result handling
   const handleSearchResultClick = useCallback(async (result: { message: Message; preview: string; context: string }) => {
-    // Switch to the correct channel
-    setSelectedChannel(result.message.channel);
+    // Find the channel for this message
+    const channelsRef = collection(db, 'channels');
+    const channelDoc = await getDoc(doc(channelsRef, result.message.channel));
+    
+    if (channelDoc.exists()) {
+      const data = channelDoc.data() as FirestoreChannel;
+      const createdAt = 'toDate' in data.createdAt ? data.createdAt.toDate() : new Date(data.createdAt.seconds * 1000);
+      setSelectedChannel({
+        id: channelDoc.id,
+        name: data.name,
+        workspaceId: data.workspaceId,
+        createdAt,
+        dm: data.dm
+      });
+    }
     
     // If it's in a thread
     if (result.message.replyTo) {
@@ -885,19 +787,18 @@ const MainPage: React.FC = () => {
     // Clear search
     setSearchQuery('');
     setSearchResults([]);
-  }, [setSelectedChannel, handleOpenThread]);
+  }, []);
 
-  const handleChannelSelect = async (channel: string, displayName?: string) => {
+  const handleChannelSelect = async (channel: Channel) => {
     setSelectedChannel(channel);
-    setDmDisplayName(displayName);
 
     // Update last seen when selecting a channel
     if (auth.currentUser) {
-        const channelMessages = messages.filter(m => m.channel === channel);
-        if (channelMessages.length > 0) {
-            const latestMessage = channelMessages[channelMessages.length - 1];
-            await updateLastSeen(auth.currentUser.uid, channel, latestMessage.id);
-        }
+      const channelMessages = messages.filter(m => m.channel === channel.id);
+      if (channelMessages.length > 0) {
+        const latestMessage = channelMessages[channelMessages.length - 1];
+        await updateLastSeen(auth.currentUser.uid, channel, latestMessage.id);
+      }
     }
   };
 
@@ -919,7 +820,7 @@ const MainPage: React.FC = () => {
   useEffect(() => {
     if (!auth.currentUser || !selectedChannel || !messages.length) return;
 
-    const channelMessages = messages.filter(m => m.channel === selectedChannel);
+    const channelMessages = messages.filter(m => m.channel === selectedChannel.id);
     if (channelMessages.length > 0) {
       const latestMessage = channelMessages[channelMessages.length - 1];
       updateLastSeen(auth.currentUser.uid, selectedChannel, latestMessage.id)
@@ -930,17 +831,16 @@ const MainPage: React.FC = () => {
   // Add this effect to find mentions when messages change
   useEffect(() => {
     const currentUser = auth.currentUser;
-    if (!currentUser?.email) return;
+    if (!currentUser?.email || !selectedChannel) return;
 
     const currentUserName = currentUser.displayName;
-    // Update regex to match both spaces and underscores in the name
     const namePattern = (currentUserName || currentUser.email).replace(/\s+/g, '[\\s_]');
     const mentionRegex = new RegExp(`@(${namePattern})(?:\\s|$)`, 'g');
     
     const newMentions = messages
       .filter(msg => {
         mentionRegex.lastIndex = 0;
-        return mentionRegex.test(msg.text);
+        return selectedChannel && msg.channel === selectedChannel.id && mentionRegex.test(msg.text);
       })
       .map(msg => ({
         message: msg,
@@ -948,7 +848,44 @@ const MainPage: React.FC = () => {
       }));
 
     setMentions(newMentions);
-  }, [messages, auth.currentUser]);
+  }, [messages, auth.currentUser, selectedChannel]);
+
+  useEffect(() => {
+    if (!workspaceId || !selectedChannel?.id || !auth.currentUser?.email) return;
+
+    // Fetch channel members
+    const workspaceRef = doc(db, 'workspaces', workspaceId);
+    const unsubscribe = onSnapshot(workspaceRef, async (doc) => {
+      if (doc.exists()) {
+        const workspaceData = doc.data();
+        const allMembers = workspaceData.members || [];
+        
+        // Fetch user data for each member
+        const memberPromises = allMembers.map(async (memberEmail: string) => {
+          const usersQuery = query(
+            collection(db, 'users'),
+            where('email', '==', memberEmail),
+            limit(1)
+          );
+          const userSnapshot = await getDocs(usersQuery);
+          const userData = userSnapshot.docs[0]?.data();
+          
+          return {
+            uid: userSnapshot.docs[0]?.id || memberEmail,
+            email: memberEmail,
+            isCurrentUser: memberEmail === auth.currentUser?.email,
+            displayName: userData?.displayName || null,
+            photoURL: userData?.photoURL || null
+          };
+        });
+
+        const members = await Promise.all(memberPromises);
+        setChannelMembers(members);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [workspaceId, selectedChannel?.id, auth.currentUser?.email]);
 
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
@@ -966,10 +903,10 @@ const MainPage: React.FC = () => {
           <div className="flex-1">
             <div className="flex flex-col">
               <h1 className="text-2xl font-bold">
-                {isDirectMessage(selectedChannel) ? (
-                  <>@{dmDisplayName || selectedChannel}</>
+                {selectedChannel?.dm ? (
+                  <>@{selectedChannel.name}</>
                 ) : (
-                  <>#{selectedChannel}</>
+                  <>#{selectedChannel?.name}</>
                 )}
               </h1>
               <div className="flex gap-1">
@@ -1031,10 +968,10 @@ const MainPage: React.FC = () => {
                     >
                       <div className="text-sm font-medium">{result.preview}</div>
                       <div className="text-xs opacity-70">{result.context}</div>
-              </div>
+                    </div>
                   ))
                 )}
-            </div>
+              </div>
             )}
           </div>
 
@@ -1057,17 +994,17 @@ const MainPage: React.FC = () => {
                 </label>
               </div>
               <ul tabIndex={0} className="mt-3 z-[100] p-2 shadow menu menu-sm dropdown-content bg-base-200 rounded-box w-52">
-                <li>
+                <li key="profile">
                   <a onClick={() => {
                     const modal = document.getElementById('profile-modal') as HTMLDialogElement;
                     if (modal) modal.showModal();
                   }}>Profile</a>
                 </li>
-                <li>
+                <li key="account">
                   <a onClick={() => {
                     if (auth.currentUser?.email) {
-                    const modal = document.getElementById('account-modal') as HTMLDialogElement;
-                    if (modal) modal.showModal();
+                      const modal = document.getElementById('account-modal') as HTMLDialogElement;
+                      if (modal) modal.showModal();
                     }
                   }} className="relative">
                     Account
@@ -1076,7 +1013,7 @@ const MainPage: React.FC = () => {
                     )}
                   </a>
                 </li>
-                <li><a onClick={handleSignOut} className="text-error">Sign out</a></li>
+                <li key="sign-out"><a onClick={handleSignOut} className="text-error">Sign out</a></li>
               </ul>
             </div>
           </div>
@@ -1094,12 +1031,12 @@ const MainPage: React.FC = () => {
             >
               <MessageList 
                 messages={messages.filter(m => 
-                  m.channel === selectedChannel && 
+                  selectedChannel && m.channel === selectedChannel.id && 
                   !m.replyTo // Only show messages that aren't replies
                 )}
                 loading={loading}
-                isDirectMessage={isDirectMessage(selectedChannel)}
-                channelName={selectedChannel}
+                isDirectMessage={!!selectedChannel?.dm}
+                channelName={selectedChannel?.name || ''}
                 getUserDisplayName={getDisplayNameForMessage}
                 getUserPhotoURL={getPhotoURLForMessage}
                 handleAddReaction={handleAddReaction}
@@ -1116,28 +1053,26 @@ const MainPage: React.FC = () => {
 
             {/* Fixed Message Input */}
             <div className="absolute bottom-0 left-0 right-0 bg-base-200 p-4">
-            <MessageInput 
-              message={message}
-              isEmailVerified={isEmailVerified}
-              typingUsers={typingUsers}
-              isDirectMessage={isDirectMessage(selectedChannel)}
-              channelName={selectedChannel}
-              displayName={dmUserInfo?.displayName || null}
-              onMessageChange={handleMessageChange}
-              onSubmit={handleSendMessage}
-              onFileClick={() => {
-                const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
-                if (modal) modal.showModal();
-              }}
+              <MessageInput 
+                message={message}
+                isEmailVerified={isEmailVerified}
+                typingUsers={typingUsers}
+                channel={selectedChannel}
+                onMessageChange={handleMessageChange}
+                onSubmit={handleSendMessage}
+                onFileClick={() => {
+                  const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
+                  if (modal) modal.showModal();
+                }}
                 replyTo={replyingTo ? {
                   senderName: replyingTo.senderName,
                   onCancel: handleCancelReply
                 } : undefined}
-              channelMembers={channelMembers.map(member => ({
-                displayName: member.displayName || null,
-                email: member.email
-              }))}
-            />
+                channelMembers={channelMembers.map(member => ({
+                  displayName: member.displayName || null,
+                  email: member.email
+                }))}
+              />
             </div>
           </div>
 
@@ -1172,16 +1107,16 @@ const MainPage: React.FC = () => {
                 <div className="navbar bg-base-300">
                   <div className="flex-1">
                     <span className="text-lg font-semibold">Thread</span>
-                              </div>
+                  </div>
                   <div className="flex-none">
-                  <button
+                    <button
                       className="btn btn-ghost btn-sm"
                       onClick={handleCloseThread}
-                  >
+                    >
                       ✕
-                  </button>
-                              </div>
-        </div>
+                    </button>
+                  </div>
+                </div>
 
                 {/* Thread Content */}
                 <div className="overflow-y-auto flex-1">
@@ -1190,8 +1125,8 @@ const MainPage: React.FC = () => {
                     <MessageList
                       messages={[messages.find(m => m.id === selectedThread.messageId)!]}
                       loading={false}
-                      isDirectMessage={isDirectMessage(selectedChannel)}
-                      channelName={selectedChannel}
+                      isDirectMessage={!!selectedChannel?.dm}
+                      channelName={selectedChannel?.name || ''}
                       getUserDisplayName={getDisplayNameForMessage}
                       getUserPhotoURL={getPhotoURLForMessage}
                       shouldShowHeader={() => true}
@@ -1210,8 +1145,8 @@ const MainPage: React.FC = () => {
                     <MessageList
                       messages={selectedThread.replies}
                       loading={false}
-                      isDirectMessage={isDirectMessage(selectedChannel)}
-                      channelName={selectedChannel}
+                      isDirectMessage={!!selectedChannel?.dm}
+                      channelName={selectedChannel?.name || ''}
                       getUserDisplayName={getDisplayNameForMessage}
                       getUserPhotoURL={getPhotoURLForMessage}
                       shouldShowHeader={() => true}
@@ -1222,7 +1157,7 @@ const MainPage: React.FC = () => {
                       commonEmojis={COMMON_EMOJIS}
                       hideReplyButton={true}
                     />
-                      </div>
+                  </div>
                 </div>
 
                 {/* Thread Input */}
@@ -1231,9 +1166,7 @@ const MainPage: React.FC = () => {
                     message={threadMessage}
                     isEmailVerified={isEmailVerified}
                     typingUsers={typingUsers}
-                    isDirectMessage={isDirectMessage(selectedChannel)}
-                    channelName={selectedChannel}
-                    displayName={dmUserInfo?.displayName || null}
+                    channel={selectedChannel}
                     onMessageChange={handleThreadMessageChange}
                     onSubmit={handleThreadSendMessage}
                     onFileClick={() => {
@@ -1253,11 +1186,11 @@ const MainPage: React.FC = () => {
                       email: member.email
                     }))}
                   />
+                </div>
+              </div>
             </div>
-              </div>
-              </div>
-            )}
-      </div>
+          )}
+        </div>
 
         {/* Modals */}
         <InviteModal onInvite={handleInviteUser} />
@@ -1294,7 +1227,7 @@ const MainPage: React.FC = () => {
 
       {/* Files Modal */}
       <FileListModal 
-        messages={messages.filter(m => m.channel === selectedChannel && m.attachment)}
+        messages={messages.filter(m => selectedChannel && m.channel === selectedChannel.id && m.attachment)}
         fileSearchQuery={fileSearchQuery}
         onSearchChange={(query) => setFileSearchQuery(query)}
         getUserDisplayName={getDisplayNameForMessage}
@@ -1302,7 +1235,7 @@ const MainPage: React.FC = () => {
 
       {/* Links Modal */}
       <LinkListModal 
-        messages={messages.filter(m => m.channel === selectedChannel)}
+        messages={messages.filter(m => selectedChannel && m.channel === selectedChannel.id)}
         linkSearchQuery={linkSearchQuery}
         onSearchChange={(query) => setLinkSearchQuery(query)}
         getUserDisplayName={getDisplayNameForMessage}

@@ -4,30 +4,24 @@ import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp,
 import { db } from '../firebase';
 import { auth } from '../firebase';
 import { toggleDMMute, isDMMuted, toggleChannelMute, hasUnseenMessages } from '../utils/chat';
-import { UserData, Message } from '../types/chat';
+import { UserData, Message, Channel } from '../types/chat';
 
 const logoLight = '/assets/logo_light.png';
 const logoDark = '/assets/logo_dark.png';
 
-interface Channel {
-    id: string;
-    name: string;
-    workspaceId: string;
-    createdAt: Date;
-}
 
 interface WorkspaceMember {
     email: string;
     displayName?: string | null;
     photoURL?: string | null;
     isActive?: boolean;
-    uid?: string;
+    uid: string;
 }
 
 interface SidebarProps {
-    onChannelSelect: (channel: string, displayName?: string) => void;
+    onChannelSelect: (channel: Channel) => void;
     workspaceId: string;
-    selectedChannel: string;
+    selectedChannel: Channel | null;
     usersCache: Record<string, UserData>;
     messages: Message[];
 }
@@ -87,7 +81,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                         email,
                         displayName: userData.displayName,
                         photoURL: userData.photoURL,
-                        uid: userData.uid
+                        uid: userSnapshot.docs[0].id
                     };
                 }
                 return { email };
@@ -116,6 +110,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                 name: doc.data().name,
                 workspaceId: doc.data().workspaceId,
                 createdAt: doc.data().createdAt?.toDate() || new Date(),
+                dm: doc.data().dm
             }));
             setChannels(channelsData);
             setLoading(false);
@@ -180,11 +175,72 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
         }
     };
 
+    const handleCreateDM = async (member: WorkspaceMember) => {
+        console.log('handleCreateDM called with member:', member);
+        if (!auth.currentUser || !workspaceId || !member.uid) return;
+
+        try {
+            console.log('Creating DM with member:', member);
+            
+            // First check if DM already exists
+            const channelsRef = collection(db, 'channels');
+            
+            // Query for DMs where either user is in the dm array
+            const dmQuery = query(
+                channelsRef,
+                where('workspaceId', '==', workspaceId),
+                where('dm', 'array-contains-any', [auth.currentUser.uid, member.uid])
+            );
+            
+            const dmSnapshot = await getDocs(dmQuery);
+            console.log('Found DM channels:', dmSnapshot.docs.length);
+            
+            // Check if DM already exists by looking for a channel that contains both users
+            const existingDM = dmSnapshot.docs.find(doc => {
+                const data = doc.data();
+                const dmUsers = data.dm || [];
+                return dmUsers.includes(auth.currentUser!.uid) && dmUsers.includes(member.uid);
+            });
+
+            if (existingDM) {
+                console.log('Using existing DM channel:', existingDM.id);
+                // Use existing DM channel
+                const data = existingDM.data();
+                const createdAt = data.createdAt?.toDate() || new Date();
+                const channel = {
+                    id: existingDM.id,
+                    name: member.displayName || member.email,
+                    workspaceId: data.workspaceId,
+                    createdAt,
+                    dm: data.dm
+                };
+                console.log('Selecting channel:', channel);
+                onChannelSelect(channel);
+            } else {
+                console.log('Creating temporary DM channel');
+                // Create a temporary channel object for the UI
+                const tempChannel = {
+                    id: `temp_dm_${auth.currentUser.uid}_${member.uid}`,
+                    name: member.displayName || member.email,
+                    workspaceId,
+                    createdAt: new Date(),
+                    dm: [auth.currentUser.uid, member.uid]
+                };
+                console.log('Selecting temporary channel:', tempChannel);
+                onChannelSelect(tempChannel);
+            }
+        } catch (error) {
+            console.error('Error handling DM:', error);
+        }
+    };
+
     const filteredChannels = channels.filter(channel =>
+        !channel.dm &&
         channel.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const filteredMembers = workspaceMembers.filter(member =>
+        member.uid !== auth.currentUser?.uid &&
         (member.displayName?.toLowerCase() || member.email.toLowerCase())
             .includes(searchTerm.toLowerCase())
     );
@@ -192,7 +248,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation();
     };
-
     return (
         <div
             className="w-80 min-h-full bg-base-100 text-base-content shadow-2xl relative z-30 border-r border-base-300"
@@ -226,20 +281,20 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                 </div>
 
                 <div className="menu bg-base-200 w-full rounded-box" onClick={(e) => e.stopPropagation()}>
-                    <div className="menu-title flex justify-between items-center">
+                    <div className="menu-title flex justify-between items-center" key="channels-header">
                         <span>Channels</span>
                         {loading && <span className="loading loading-spinner loading-xs"></span>}
                     </div>
                     {filteredChannels.map(channel => (
                         <li className="flex items-center px-0 py-1" key={channel.id}>
                             <button
-                                onClick={() => onChannelSelect(channel.name)}
-                                className={`${selectedChannel === channel.name ? 'bg-base-300' : ''} w-full hover:bg-base-300 px-4 py-2 flex`}
+                                onClick={() => onChannelSelect(channel)}
+                                className={`${selectedChannel?.id === channel.id ? 'bg-base-300' : ''} w-full hover:bg-base-300 px-4 py-2 flex`}
                             >
                                 <div className="flex justify-between w-full">
-                                    <div className={`flex items-center gap-1 ${currentUserData?.mutedChannels?.includes(channel.name) ? 'opacity-50' : ''}`}>
+                                    <div className={`flex items-center gap-1 ${currentUserData?.mutedChannels?.includes(channel.id) ? 'opacity-50' : ''}`}>
                                         <span className="text-sm">#</span>
-                                        <span className={`text-sm ${hasUnseenMessages(channel.name, messages, currentUserData) ? 'font-bold' : ''}`}>
+                                        <span className={`text-sm ${hasUnseenMessages(channel, messages, currentUserData) ? 'font-bold' : ''}`}>
                                             {channel.name}
                                         </span>
                                     </div>
@@ -250,15 +305,14 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                                             <FaEllipsisV />
                                         </label>
                                         <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-                                            <li>
+                                            <li key="mute-notifications">
                                                 <a onClick={(e) => {
                                                     e.stopPropagation();
                                                     if (!auth.currentUser) return;
-                                                    toggleChannelMute(auth.currentUser.uid, channel.name);
-                                                    // Find and close the dropdown by removing focus
+                                                    toggleChannelMute(auth.currentUser.uid, channel.id);
                                                     (e.currentTarget.closest('ul') as HTMLElement)?.blur();
                                                 }}>
-                                                    {currentUserData?.mutedChannels?.includes(channel.name) ? 'Unmute' : 'Mute'} Notifications
+                                                    {currentUserData?.mutedChannels?.includes(channel.id) ? 'Unmute' : 'Mute'} Notifications
                                                 </a>
                                             </li>
                                         </ul>
@@ -268,7 +322,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                         </li>
                     ))}
 
-                    <div className="px-0 py-1">
+                    <div className="px-0 py-1" key="add-channel">
                         {!isEmailVerified ? (
                             <div className="alert alert-warning text-sm">
                                 <span>Please verify your email to create channels.</span>
@@ -287,57 +341,60 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                         )}
                     </div>
 
-                    <div className="menu-title mt-4">Direct Messages</div>
+                    <div className="menu-title mt-4" key="dm-header">Direct Messages</div>
                     {filteredMembers.map(member => (
-                        member.email !== auth.currentUser?.email && (
-                            <div key={member.email} className="flex items-center px-0 py-1">
-                                <button
-                                    onClick={() => onChannelSelect(member.email, member.displayName || undefined)}
-                                    className={`hover:bg-base-300 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left ${selectedChannel === member.email ? 'bg-base-300' : ''}`}
-                                >
-                                    <div className="flex justify-between items-center">
-                                        <div className={`flex items-center gap-2 ${currentUserData?.mutedDMs?.includes(member.email) ? 'opacity-50' : ''}`}>
-                                            <div className="avatar placeholder indicator">
-                                                {member.photoURL ? (
-                                                    <div className="w-6 h-6 rounded-full">
-                                                        <img src={member.photoURL} alt="Profile" />
-                                                    </div>
-                                                ) : (
-                                                    <div className="bg-neutral text-neutral-content rounded-full w-6">
-                                                        <span className="text-xs">{member.displayName?.[0] || member.email[0].toUpperCase()}</span>
-                                                    </div>
-                                                )}
-                                                <span className={`indicator-item badge badge-xs ${activeUsers.has(member.email) ? 'badge-success' : 'badge-neutral opacity-40'}`}></span>
-                                            </div>
-                                            <span className={hasUnseenMessages(member.email, messages, currentUserData) ? 'font-bold' : ''}>
-                                                {member.displayName || member.email}
-                                            </span>
+                        <div key={member.uid} className="flex items-center px-0 py-1">
+                            <button
+                                onClick={() => handleCreateDM(member)}
+                                className={`hover:bg-base-300 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left`}
+                            >
+                                <div className="flex justify-between items-center">
+                                    <div className={`flex items-center gap-2 ${currentUserData?.mutedDMs?.includes(member.uid) ? 'opacity-50' : ''}`}>
+                                        <div className="avatar placeholder indicator">
+                                            {member.photoURL ? (
+                                                <div className="w-6 h-6 rounded-full">
+                                                    <img src={member.photoURL} alt="Profile" />
+                                                </div>
+                                            ) : (
+                                                <div className="bg-neutral text-neutral-content rounded-full w-6">
+                                                    <span className="text-xs">{member.displayName?.[0] || member.email[0].toUpperCase()}</span>
+                                                </div>
+                                            )}
+                                            <span className={`indicator-item badge badge-xs ${activeUsers.has(member.email) ? 'badge-success' : 'badge-neutral opacity-40'}`}></span>
                                         </div>
-                                        <div className="dropdown dropdown-end" onClick={(e) => e.stopPropagation()}>
-                                            <input type="checkbox" className="hidden peer" />
-                                            <label tabIndex={0} className="btn btn-ghost btn-sm btn-square peer-checked:btn-active">
-                                                <FaEllipsisV />
-                                            </label>
-                                            <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-                                                <li><a>View Profile</a></li>
-                                                <li>
-                                                    <a onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        if (!auth.currentUser) return;
-                                                        toggleDMMute(auth.currentUser.uid, member.email);
-                                                        // Find and close the dropdown by removing focus
-                                                        (e.currentTarget.closest('ul') as HTMLElement)?.blur();
-                                                    }}>
-                                                        {currentUserData?.mutedDMs?.includes(member.email) ? 'Unmute' : 'Mute'} Notifications
-                                                    </a>
-                                                </li>
-                                                <li><a className="text-error">Block User</a></li>
-                                            </ul>
-                                        </div>
+                                        <span className={`${
+                                            // Find DM channel with this member and check for unseen messages
+                                            channels.some(channel => 
+                                                channel.dm?.includes(member.uid) && 
+                                                hasUnseenMessages(channel, messages, currentUserData)
+                                            ) ? 'font-bold' : ''
+                                        }`}>
+                                            {member.displayName || member.email}
+                                        </span>
                                     </div>
-                                </button>
-                            </div>
-                        )
+                                    <div className="dropdown dropdown-end" onClick={(e) => e.stopPropagation()}>
+                                        <input type="checkbox" className="hidden peer" />
+                                        <label tabIndex={0} className="btn btn-ghost btn-sm btn-square peer-checked:btn-active">
+                                            <FaEllipsisV />
+                                        </label>
+                                        <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
+                                            <li key="view-profile"><a>View Profile</a></li>
+                                            <li key="mute-notifications">
+                                                <a onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (!auth.currentUser) return;
+                                                    toggleDMMute(auth.currentUser.uid, member.uid);
+                                                    (e.currentTarget.closest('ul') as HTMLElement)?.blur();
+                                                }}>
+                                                    {currentUserData?.mutedDMs?.includes(member.uid) ? 'Unmute' : 'Mute'} Notifications
+                                                </a>
+                                            </li>
+                                            <li key="block-user"><a className="text-error">Block User</a></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
                     ))}
                 </div>
             </div>

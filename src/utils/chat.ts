@@ -2,7 +2,7 @@ import { FaFileImage, FaFilePdf, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFi
 import { IconType } from 'react-icons';
 import { doc, getDoc, updateDoc, arrayRemove, arrayUnion, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
-import { UserData, Message } from '../types/chat';
+import { UserData, Message, Channel } from '../types/chat';
 
 export const formatTime = (date: Date): string => {
   return date.toLocaleTimeString('en-US', { 
@@ -18,9 +18,8 @@ export const shouldShowHeader = (currentMsgSenderId: string, index: number, mess
   return prevMsgSenderId !== currentMsgSenderId;
 };
 
-export const isDirectMessage = (channelName: string): boolean => {
-  // A channel name that contains @ is an email address, indicating a DM
-  return channelName.includes('@');
+export const isDirectMessage = (channel: Channel | null): boolean => {
+  return !!channel?.dm;
 };
 
 export const getFileIcon = (fileName: string, contentType?: string): IconType => {
@@ -38,7 +37,7 @@ export const formatFileSize = (bytes: number): string => {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 };
 
-export const toggleDMMute = async (userUid: string, dmEmail: string): Promise<void> => {
+export const toggleDMMute = async (userUid: string, channelId: string): Promise<void> => {
   const userRef = doc(db, 'users', userUid);
   const userDoc = await getDoc(userRef);
   
@@ -48,20 +47,20 @@ export const toggleDMMute = async (userUid: string, dmEmail: string): Promise<vo
 
   const userData = userDoc.data() as UserData;
   const mutedDMs = userData.mutedDMs || [];
-  const isMuted = mutedDMs.includes(dmEmail);
+  const isMuted = mutedDMs.includes(channelId);
 
   if (isMuted) {
     await updateDoc(userRef, {
-      mutedDMs: arrayRemove(dmEmail)
+      mutedDMs: arrayRemove(channelId)
     });
   } else {
     await updateDoc(userRef, {
-      mutedDMs: arrayUnion(dmEmail)
+      mutedDMs: arrayUnion(channelId)
     });
   }
 };
 
-export const toggleChannelMute = async (userUid: string, channelName: string): Promise<void> => {
+export const toggleChannelMute = async (userUid: string, channelId: string): Promise<void> => {
   const userRef = doc(db, 'users', userUid);
   const userDoc = await getDoc(userRef);
   
@@ -71,15 +70,15 @@ export const toggleChannelMute = async (userUid: string, channelName: string): P
 
   const userData = userDoc.data() as UserData;
   const mutedChannels = userData.mutedChannels || [];
-  const isMuted = mutedChannels.includes(channelName);
+  const isMuted = mutedChannels.includes(channelId);
 
   if (isMuted) {
     await updateDoc(userRef, {
-      mutedChannels: arrayRemove(channelName)
+      mutedChannels: arrayRemove(channelId)
     });
   } else {
     await updateDoc(userRef, {
-      mutedChannels: arrayUnion(channelName)
+      mutedChannels: arrayUnion(channelId)
     });
   }
 };
@@ -94,41 +93,30 @@ export const isChannelMuted = (userUid: string, channelName: string, usersCache:
   return userData?.mutedChannels?.includes(channelName) || false;
 };
 
-export const updateLastSeen = async (userUid: string, channelOrDM: string, messageId: string): Promise<void> => {
+export const updateLastSeen = async (userUid: string, channelOrDM: string | Channel, messageId: string): Promise<void> => {
   const userRef = doc(db, 'users', userUid);
+  const channelId = typeof channelOrDM === 'string' ? channelOrDM : channelOrDM.id;
   
   await updateDoc(userRef, {
-    [`lastSeen.${channelOrDM}`]: {
+    [`lastSeen.${channelId}`]: {
       timestamp: serverTimestamp(),
       messageId
     }
   });
 };
 
-export const hasUnseenMessages = (
-  channelOrDM: string, 
-  messages: Message[], 
-  userData: UserData | null
-): boolean => {
-  if (!userData || !messages.length) return false;
+export const hasUnseenMessages = (channel: Channel, messages: Message[], userData: UserData | null): boolean => {
+  if (!userData?.lastSeen) return false;
+  if (!channel) return false;
 
-  const lastSeen = userData.lastSeen?.[channelOrDM];
-  if (!lastSeen || !lastSeen.timestamp) return messages.some(msg => msg.channel === channelOrDM);
+  const channelId = channel.id;
+  const lastSeen = userData.lastSeen[channelId];
+  if (!lastSeen) return true;
 
-  // Convert Firestore timestamp to Date if needed
-  let lastSeenDate: Date;
-  if (lastSeen.timestamp instanceof Date) {
-    lastSeenDate = lastSeen.timestamp;
-  } else if (lastSeen.timestamp.seconds) {
-    lastSeenDate = new Date(lastSeen.timestamp.seconds * 1000);
-  } else {
-    // If timestamp is null (which can happen with serverTimestamp()), treat as unseen
-    return messages.some(msg => msg.channel === channelOrDM);
-  }
-  
-  // Check if there are any messages newer than the last seen timestamp
-  return messages.some(msg => 
-    msg.channel === channelOrDM && 
-    msg.timestamp > lastSeenDate
-  );
+  const channelMessages = messages.filter(m => m.channel === channelId);
+  if (channelMessages.length === 0) return false;
+
+  const lastMessage = channelMessages[channelMessages.length - 1];
+  const lastSeenTimestamp = lastSeen.timestamp instanceof Date ? lastSeen.timestamp : lastSeen.timestamp ? new Date(lastSeen.timestamp.seconds * 1000) : new Date();
+  return lastMessage.timestamp > lastSeenTimestamp;
 }; 

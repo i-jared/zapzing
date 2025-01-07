@@ -35,10 +35,10 @@ export interface UserData {
   email: string;
   displayName: string | null;
   photoURL: string | null;
-  mutedDMs?: string[]; // Array of email addresses of muted DMs
-  mutedChannels?: string[]; // Array of channel names that are muted
+  mutedDMs?: string[];  // Array of channel IDs of muted DMs
+  mutedChannels?: string[];  // Array of channel IDs that are muted
   lastSeen?: {
-    [channelOrDM: string]: {
+    [channelId: string]: {
       timestamp: { seconds: number; nanoseconds: number } | Date;
       messageId: string;
     };
@@ -58,4 +58,19 @@ export interface UserActivity {
   isTyping: boolean;
   typingIn: string | null;
   displayName: string | null;
+}
+
+export interface Channel {
+  id: string;
+  name: string;
+  workspaceId: string;
+  createdAt: Date;
+  dm?: string[];  // Array of two user UIDs for DM channels
+}
+
+export interface FirestoreChannel {
+  name: string;
+  workspaceId: string;
+  createdAt: { seconds: number; nanoseconds: number } | { toDate: () => Date };
+  dm?: string[];  // Array of two user UIDs for DM channels
 } 
