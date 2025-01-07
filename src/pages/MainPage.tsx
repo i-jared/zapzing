@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar'; 
-import { FaPaperPlane, FaUser, FaBuilding, FaUserCircle, FaCamera, FaChevronDown, FaChevronRight } from 'react-icons/fa';
+import { FaPaperPlane, FaUser, FaBuilding, FaUserCircle, FaCamera, FaChevronDown, FaChevronRight, FaSmile } from 'react-icons/fa';
 import { signOut, updateProfile, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendEmailVerification } from 'firebase/auth';
 import { auth, db, storage } from '../firebase';
 import { 
@@ -23,6 +23,11 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
+interface Reaction {
+  emoji: string;
+  users: string[];  // array of user IDs who reacted with this emoji
+}
+
 interface Message {
   id: string;
   text: string;
@@ -35,6 +40,7 @@ interface Message {
   timestamp: Date;
   channel: string;
   workspaceId: string;
+  reactions?: { [key: string]: Reaction };  // emoji as key
 }
 
 interface UserData {
@@ -57,6 +63,9 @@ interface UserActivity {
   typingIn: string | null;
   displayName: string | null;
 }
+
+// Add common emojis array
+const COMMON_EMOJIS = ['👍', '❤️', '😂', '🎉', '🚀'];
 
 const MainPage: React.FC = () => {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -114,7 +123,8 @@ const MainPage: React.FC = () => {
         sender: doc.data().sender,
         timestamp: doc.data().timestamp?.toDate() || new Date(),
         channel: doc.data().channel,
-        workspaceId: doc.data().workspaceId
+        workspaceId: doc.data().workspaceId,
+        reactions: doc.data().reactions || {}  // Include reactions in the message data
       }));
       setMessages(messagesData);
       setLoading(false);
@@ -564,6 +574,46 @@ const MainPage: React.FC = () => {
     fetchUserInfo();
   }, [selectedChannel]);
 
+  const handleAddReaction = async (messageId: string, emoji: string) => {
+    if (!auth.currentUser || !workspaceId) return;
+
+    const messageRef = doc(db, 'messages', messageId);
+    const messageDoc = await getDoc(messageRef);
+    
+    if (!messageDoc.exists()) return;
+
+    const currentReactions = messageDoc.data().reactions || {};
+    const currentReaction = currentReactions[emoji] || { emoji, users: [] };
+    const userIndex = currentReaction.users.indexOf(auth.currentUser.uid);
+
+    if (userIndex === -1) {
+      // Add reaction
+      await updateDoc(messageRef, {
+        [`reactions.${emoji}`]: {
+          emoji,
+          users: [...currentReaction.users, auth.currentUser.uid]
+        }
+      });
+    } else {
+      // Remove reaction
+      const updatedUsers = currentReaction.users.filter(uid => uid !== auth.currentUser?.uid);
+      if (updatedUsers.length === 0) {
+        // Remove the entire emoji entry if no users left
+        const { [emoji]: removed, ...remainingReactions } = currentReactions;
+        await updateDoc(messageRef, {
+          reactions: remainingReactions
+        });
+      } else {
+        await updateDoc(messageRef, {
+          [`reactions.${emoji}`]: {
+            emoji,
+            users: updatedUsers
+          }
+        });
+      }
+    }
+  };
+
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
@@ -634,8 +684,8 @@ const MainPage: React.FC = () => {
         {/* Main Content with Right Sidebar */}
         <div className="flex flex-1 overflow-hidden">
           {/* Messages Area */}
-          <div className="flex-1 flex flex-col">
-            <div className="flex-1 p-4 overflow-y-auto">
+      <div className="flex-1 flex flex-col">
+        <div className="flex-1 p-4 overflow-y-auto">
               {loading ? (
                 <div className="h-full flex items-center justify-center">
                   <span className="loading loading-spinner loading-lg"></span>
@@ -652,7 +702,7 @@ const MainPage: React.FC = () => {
                   {messages
                     .filter(m => m.channel === selectedChannel)
                     .map((msg, index, filteredMessages) => (
-                      <div key={msg.id} className="flex pl-4">
+                      <div key={msg.id} className="flex pl-4 group relative">
                         <div className="w-10 flex-shrink-0">
                           {shouldShowHeader(msg, index, filteredMessages) && (
                             <div className="avatar">
@@ -681,7 +731,62 @@ const MainPage: React.FC = () => {
                               </time>
                             </div>
                           )}
-                          <div className="text-base-content">{msg.text}</div>
+                          <div className="text-base-content relative group">
+                            <div className="flex items-start">
+                              <div className="flex-1">{msg.text}</div>
+                            </div>
+
+                            {/* Reaction Menu - Absolutely positioned */}
+                            <div className="hidden group-hover:flex items-center gap-2 absolute -top-12 right-0 bg-base-200 rounded-full p-2 shadow-lg z-10">
+                              {COMMON_EMOJIS.map(emoji => (
+                                <button
+                                  key={emoji}
+                                  className="btn btn-ghost btn-sm px-2 min-h-0 h-8 flex items-center justify-center hover:bg-base-300"
+                                  onClick={() => handleAddReaction(msg.id, emoji)}
+                                >
+                                  <span className="text-lg leading-none">{emoji}</span>
+                                </button>
+                              ))}
+                              <div className="dropdown dropdown-end">
+                                <label tabIndex={0} className="btn btn-ghost btn-sm px-2 min-h-0 h-8 flex items-center justify-center">
+                                  <FaSmile className="w-5 h-5" />
+                                </label>
+                                <div tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-200 rounded-box w-64">
+                                  <div className="grid grid-cols-8 gap-1">
+                                    {'👍❤️😂🎉🚀😊😍🙌💯👏🔥⭐️💫✨🌟💖💝💕💓💪🎈🎊'
+                                      .split('')
+                                      .map(emoji => (
+                                        <button
+                                          key={emoji}
+                                          className="btn btn-ghost btn-sm min-h-0 h-8 p-0 flex items-center justify-center hover:bg-base-300"
+                                          onClick={() => handleAddReaction(msg.id, emoji)}
+                                        >
+                                          <span className="text-lg leading-none">{emoji}</span>
+                                        </button>
+                                      ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Display Reactions */}
+                            {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {Object.entries(msg.reactions).map(([emoji, reaction]) => (
+                                  <button
+                                    key={emoji}
+                                    className={`btn btn-ghost btn-xs min-h-0 h-6 gap-1 px-2 flex items-center justify-center ${
+                                      reaction.users.includes(auth.currentUser?.uid || '') ? 'btn-active' : ''
+                                    }`}
+                                    onClick={() => handleAddReaction(msg.id, emoji)}
+                                  >
+                                    <span className="text-base leading-none">{emoji}</span>
+                                    <span className="text-xs leading-none">{reaction.users.length}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -925,8 +1030,8 @@ const MainPage: React.FC = () => {
                 <label className="label">
                   <span className="label-text">Display Name</span>
                 </label>
-                <input
-                  type="text"
+            <input
+              type="text"
                   placeholder="Your name"
                   className="input input-bordered w-full"
                   value={displayName}
@@ -1145,12 +1250,12 @@ const MainPage: React.FC = () => {
                 }}
               >
                 Close
-              </button>
+            </button>
             </div>
           </div>
           <form method="dialog" className="modal-backdrop">
             <button>close</button>
-          </form>
+        </form>
         </dialog>
       </div>
 
