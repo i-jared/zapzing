@@ -63,16 +63,16 @@ const FileListModal: React.FC<FileListModalProps> = ({
     <dialog id="files-modal" className="modal">
       <div className="modal-box max-w-4xl">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-lg">Channel Files</h3>
+          <h3 className="font-bold text-lg text-base-content">Channel Files</h3>
           <div className="join">
             <input
               type="text"
               placeholder="Search files..."
-              className="input input-bordered join-item w-64"
+              className="input input-bordered join-item w-64 text-base-content placeholder:text-base-content/60"
               value={fileSearchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
             />
-            <button className="btn join-item">
+            <button className="btn join-item text-base-content">
               <FaSearch className="w-4 h-4" />
             </button>
           </div>
@@ -80,7 +80,7 @@ const FileListModal: React.FC<FileListModalProps> = ({
         <div className="overflow-y-auto max-h-[60vh]">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-h-[50vh]">
             {filteredMessages.map((msg) => (
-              <div key={msg.id} className="card bg-base-200">
+              <div key={msg.id} className="card bg-base-100">
                 <div className="card-body p-4">
                   {msg.attachment?.contentType?.startsWith('image/') ? (
                     // Image Preview
@@ -95,7 +95,7 @@ const FileListModal: React.FC<FileListModalProps> = ({
                           href={msg.attachment.url} 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="btn btn-sm btn-ghost"
+                          className="btn btn-sm btn-ghost text-base-content"
                           title="View full size"
                         >
                           <FaExternalLinkAlt />
@@ -103,7 +103,7 @@ const FileListModal: React.FC<FileListModalProps> = ({
                         <a 
                           href={msg.attachment.url} 
                           download={msg.attachment.name}
-                          className="btn btn-sm btn-ghost"
+                          className="btn btn-sm btn-ghost text-base-content"
                           title="Download"
                         >
                           <FaDownload />
@@ -113,18 +113,18 @@ const FileListModal: React.FC<FileListModalProps> = ({
                   ) : (
                     // File Preview
                     <div className="flex items-start gap-4">
-                      <div className="text-3xl opacity-70">
+                      <div className="text-3xl text-base-content/70">
                         {React.createElement(getFileIcon(msg.attachment?.name || '', msg.attachment?.contentType))}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">{msg.attachment?.name}</div>
-                        <div className="text-sm opacity-70">{formatFileSize(msg.attachment?.size || 0)}</div>
+                        <div className="font-medium truncate text-base-content">{msg.attachment?.name}</div>
+                        <div className="text-sm text-base-content/70">{formatFileSize(msg.attachment?.size || 0)}</div>
                         <div className="mt-2 flex gap-2">
                           <a 
                             href={msg.attachment?.url} 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="btn btn-sm btn-ghost"
+                            className="btn btn-sm btn-ghost text-base-content"
                             title="View"
                           >
                             <FaExternalLinkAlt />
@@ -132,7 +132,7 @@ const FileListModal: React.FC<FileListModalProps> = ({
                           <a 
                             href={msg.attachment?.url} 
                             download={msg.attachment?.name}
-                            className="btn btn-sm btn-ghost"
+                            className="btn btn-sm btn-ghost text-base-content"
                             title="Download"
                           >
                             <FaDownload />
@@ -141,7 +141,7 @@ const FileListModal: React.FC<FileListModalProps> = ({
                       </div>
                     </div>
                   )}
-                  <div className="text-xs opacity-70 mt-2">
+                  <div className="text-xs text-base-content/70 mt-2">
                     Shared by {getUserDisplayName(msg.sender.uid, msg.sender.email, msg.sender.displayName)} on {msg.timestamp.toLocaleDateString()}
                   </div>
                 </div>
@@ -150,7 +150,7 @@ const FileListModal: React.FC<FileListModalProps> = ({
 
             {messages.length === 0 && (
               <div className="col-span-full flex items-center justify-center h-full">
-                <div className="text-center opacity-50">
+                <div className="text-center text-base-content/50">
                   <FaFile className="w-12 h-12 mx-auto mb-2" />
                   <div className="text-lg font-semibold">No files shared yet</div>
                   <div className="text-sm">Files shared in this channel will appear here</div>
@@ -160,7 +160,7 @@ const FileListModal: React.FC<FileListModalProps> = ({
 
             {messages.length > 0 && filteredMessages.length === 0 && (
               <div className="col-span-full flex items-center justify-center h-full">
-                <div className="text-center opacity-50">
+                <div className="text-center text-base-content/50">
                   <FaSearch className="w-12 h-12 mx-auto mb-2" />
                   <div className="text-lg font-semibold">No matching files</div>
                   <div className="text-sm">Try adjusting your search terms</div>

@@ -35,34 +35,34 @@ const SignIn: React.FC<SignInProps> = ({ onPageChange, setLoading }) => {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Sign In</h2>
+      <h2 className="text-2xl font-bold mb-6 text-base-content">Sign In</h2>
       {error && (
         <div className="alert alert-error mb-4">
-          <span>{error}</span>
+          <span className="text-error-content">{error}</span>
         </div>
       )}
       <form onSubmit={handleSubmit}>
-        <div className="form-control mb-4">
+        <div className="form-control">
           <label className="label">
-            <span className="label-text">Email</span>
+            <span className="label-text text-base-content">Email</span>
           </label>
           <input
             type="email"
             placeholder="email@example.com"
-            className="input input-bordered w-full"
+            className="input input-bordered text-base-content placeholder:text-base-content/60"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
           />
         </div>
-        <div className="form-control mb-6">
+        <div className="form-control mt-4">
           <label className="label">
-            <span className="label-text">Password</span>
+            <span className="label-text text-base-content">Password</span>
           </label>
           <input
             type="password"
-            placeholder="••••••••"
-            className="input input-bordered w-full"
+            placeholder="********"
+            className="input input-bordered text-base-content placeholder:text-base-content/60"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required

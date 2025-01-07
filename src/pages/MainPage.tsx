@@ -992,7 +992,7 @@ const MainPage: React.FC = () => {
           </div>
           <div className="flex-1">
             <div className="flex flex-col">
-              <h1 className="text-2xl font-bold">
+              <h1 className="text-2xl font-bold text-base-content">
                 {selectedChannel?.dm ? (
                   <>@{selectedChannel.name}</>
                 ) : (
@@ -1001,7 +1001,7 @@ const MainPage: React.FC = () => {
               </h1>
               <div className="flex gap-1">
                 <button
-                  className="btn btn-ghost btn-xs btn-square w-fit"
+                  className="btn btn-ghost btn-xs btn-square w-fit text-base-content"
                   onClick={() => {
                     const modal = document.getElementById('files-modal') as HTMLDialogElement;
                     if (modal) modal.showModal();
@@ -1011,7 +1011,7 @@ const MainPage: React.FC = () => {
                   <FaFolder className="w-6 h-3" />
                 </button>
                 <button
-                  className="btn btn-ghost btn-xs btn-square w-fit"
+                  className="btn btn-ghost btn-xs btn-square w-fit text-base-content"
                   onClick={() => {
                     const modal = document.getElementById('links-modal') as HTMLDialogElement;
                     if (modal) modal.showModal();
@@ -1021,7 +1021,7 @@ const MainPage: React.FC = () => {
                   <FaLink className="w-6 h-3" />
                 </button>
                 <button
-                  className="btn btn-ghost btn-xs btn-square w-fit"
+                  className="btn btn-ghost btn-xs btn-square w-fit text-base-content"
                   onClick={() => {
                     const modal = document.getElementById('mentions-modal') as HTMLDialogElement;
                     if (modal) modal.showModal();
@@ -1039,7 +1039,7 @@ const MainPage: React.FC = () => {
             <input
               type="text"
               placeholder="Search messages..."
-              className="input input-bordered w-full"
+              className="input input-bordered w-full text-base-content placeholder:text-base-content/60"
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
             />
@@ -1051,7 +1051,7 @@ const MainPage: React.FC = () => {
               >
                 {isSearching ? (
                   <div className="flex items-center justify-center p-4">
-                    <span className="loading loading-spinner loading-md"></span>
+                    <span className="loading loading-spinner loading-md text-base-content"></span>
                   </div>
                 ) : (
                   searchResults.map((result) => (
@@ -1063,8 +1063,8 @@ const MainPage: React.FC = () => {
                       }}
                       className="p-2 hover:bg-base-300 rounded-lg cursor-pointer"
                     >
-                      <div className="text-sm font-medium">{result.preview}</div>
-                      <div className="text-xs opacity-70">{result.context}</div>
+                      <div className="text-sm font-medium text-base-content">{result.preview}</div>
+                      <div className="text-xs text-base-content/70">{result.context}</div>
                     </div>
                   ))
                 )}
@@ -1074,7 +1074,7 @@ const MainPage: React.FC = () => {
 
           <div className="flex-none gap-2">
             <button 
-              className="btn btn-ghost btn-circle"
+              className="btn btn-ghost btn-circle text-base-content"
               onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
               disabled={!isEmailVerified}
               title={!isEmailVerified ? "Please verify your email to access workspace settings" : ""}
@@ -1083,7 +1083,7 @@ const MainPage: React.FC = () => {
             </button>
             <div className="dropdown dropdown-end">
               <div className="indicator">
-                <label tabIndex={0} className="btn btn-ghost btn-circle relative">
+                <label tabIndex={0} className="btn btn-ghost btn-circle relative text-base-content">
                   <FaUserCircle className="w-6 h-6" />
                   {!isEmailVerified && (
                     <span className="absolute -top-1 -right-1 badge badge-error badge-xs w-3 h-3 p-0"></span>
@@ -1343,13 +1343,13 @@ const MainPage: React.FC = () => {
       {/* Mentions Modal */}
       <dialog id="mentions-modal" className="modal">
         <div className="modal-box">
-          <h3 className="font-bold text-lg">Mentions</h3>
+          <h3 className="font-bold text-lg text-base-content">Mentions</h3>
           <div className="py-4 space-y-4">
             {mentions.length === 0 ? (
               <p className="text-center text-base-content/70">No mentions yet</p>
             ) : (
               mentions.map(({ message, mentionedName }) => (
-                <div key={message.id} className="bg-base-300 p-4 rounded-lg">
+                <div key={message.id} className="bg-base-100 p-4 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="avatar placeholder">
                       <div className="bg-neutral text-neutral-content rounded-full w-8">
@@ -1363,7 +1363,7 @@ const MainPage: React.FC = () => {
                       </div>
                     </div>
                     <div>
-                      <span className="font-medium">
+                      <span className="font-medium text-base-content">
                         {getUserDisplayName(
                           message.sender.uid,
                           message.sender.email,
@@ -1375,7 +1375,9 @@ const MainPage: React.FC = () => {
                       </span>
                     </div>
                   </div>
-                  <MessageText text={message.text} />
+                  <div className="text-base-content">
+                    <MessageText text={message.text} />
+                  </div>
                 </div>
               ))
             )}

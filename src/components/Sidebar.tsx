@@ -273,26 +273,26 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                     <input
                         type="text"
                         placeholder="Search..."
-                        className="input input-bordered w-full"
+                        className="input input-bordered w-full text-base-content placeholder:text-base-content/60"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         onClick={(e) => e.stopPropagation()}
                     />
                 </div>
 
-                <div className="menu bg-base-200 w-full rounded-box" onClick={(e) => e.stopPropagation()}>
-                    <div className="menu-title flex justify-between items-center" key="channels-header">
+                <div className="menu bg-base-100 w-full rounded-box" onClick={(e) => e.stopPropagation()}>
+                    <div className="menu-title flex justify-between items-center text-base-content" key="channels-header">
                         <span>Channels</span>
-                        {loading && <span className="loading loading-spinner loading-xs"></span>}
+                        {loading && <span className="loading loading-spinner loading-xs text-base-content"></span>}
                     </div>
                     {filteredChannels.map(channel => (
                         <li className="flex items-center px-0 py-1" key={channel.id}>
                             <button
                                 onClick={() => onChannelSelect(channel)}
-                                className={`${selectedChannel?.id === channel.id ? 'bg-base-300' : ''} w-full hover:bg-base-300 px-4 py-2 flex`}
+                                className={`${selectedChannel?.id === channel.id ? 'bg-base-300' : 'bg-base-100'} w-full hover:bg-base-200 px-4 py-2 flex`}
                             >
                                 <div className="flex justify-between w-full">
-                                    <div className={`flex items-center gap-1 ${currentUserData?.mutedChannels?.includes(channel.id) ? 'opacity-50' : ''}`}>
+                                    <div className={`flex items-center gap-1 ${currentUserData?.mutedChannels?.includes(channel.id) ? 'text-base-content/50' : 'text-base-content'}`}>
                                         <span className="text-sm">#</span>
                                         <span className={`text-sm ${hasUnseenMessages(channel, messages, currentUserData) ? 'font-bold' : ''}`}>
                                             {channel.name}
@@ -301,7 +301,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
 
                                     <div className="dropdown dropdown-end ml-4" onClick={(e) => e.stopPropagation()}>
                                         <input type="checkbox" className="hidden peer" />
-                                        <label tabIndex={0} className="btn btn-ghost btn-sm btn-square peer-checked:btn-active">
+                                        <label tabIndex={0} className="btn btn-ghost btn-sm btn-square peer-checked:btn-active text-base-content">
                                             <FaEllipsisV />
                                         </label>
                                         <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
@@ -311,7 +311,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                                                     if (!auth.currentUser) return;
                                                     toggleChannelMute(auth.currentUser.uid, channel.id);
                                                     (e.currentTarget.closest('ul') as HTMLElement)?.blur();
-                                                }}>
+                                                }}
+                                                className="text-base-content"
+                                                >
                                                     {currentUserData?.mutedChannels?.includes(channel.id) ? 'Unmute' : 'Mute'} Notifications
                                                 </a>
                                             </li>
@@ -354,15 +356,15 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                         )}
                     </div>
 
-                    <div className="menu-title mt-4" key="dm-header">Direct Messages</div>
+                    <div className="menu-title mt-4 text-base-content" key="dm-header">Direct Messages</div>
                     {filteredMembers.map(member => (
                         <div key={member.uid} className="flex items-center px-0 py-1">
                             <button
                                 onClick={() => handleCreateDM(member)}
-                                className={`hover:bg-base-300 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left`}
+                                className={`hover:bg-base-200 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left bg-base-100`}
                             >
                                 <div className="flex justify-between items-center">
-                                    <div className={`flex items-center gap-2 ${currentUserData?.mutedDMs?.includes(member.uid) ? 'opacity-50' : ''}`}>
+                                    <div className={`flex items-center gap-2 ${currentUserData?.mutedDMs?.includes(member.uid) ? 'text-base-content/50' : 'text-base-content'}`}>
                                         <div className="avatar placeholder indicator">
                                             {member.photoURL ? (
                                                 <div className="w-6 h-6 rounded-full">

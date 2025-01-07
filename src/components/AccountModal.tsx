@@ -85,17 +85,17 @@ const AccountModal: React.FC<AccountModalProps> = ({
   return (
     <dialog id="account-modal" className="modal">
       <div className="modal-box">
-        <h3 className="font-bold text-lg mb-4">Account Settings</h3>
+        <h3 className="font-bold text-lg mb-4 text-base-content">Account Settings</h3>
         
         {/* Email Change Section */}
         <div className="form-control mb-6">
-          <h4 className="font-semibold mb-2">Email Settings</h4>
+          <h4 className="font-semibold mb-2 text-base-content">Email Settings</h4>
           {isEmailVerified ? (
             <form onSubmit={handleEmailUpdate}>
               <input
                 type="email"
                 placeholder="New Email"
-                className="input input-bordered w-full mb-2"
+                className="input input-bordered w-full mb-2 text-base-content placeholder:text-base-content/60"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
                 required
@@ -103,7 +103,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
               <input
                 type="password"
                 placeholder="Current Password"
-                className="input input-bordered w-full mb-2"
+                className="input input-bordered w-full mb-2 text-base-content placeholder:text-base-content/60"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 required
@@ -134,24 +134,23 @@ const AccountModal: React.FC<AccountModalProps> = ({
 
         {/* Password Change Section */}
         <div className="form-control mb-6">
-          <h4 className="font-semibold mb-2">Change Password</h4>
+          <h4 className="font-semibold mb-2 text-base-content">Change Password</h4>
           <form onSubmit={handlePasswordUpdate}>
             <input
               type="password"
-              placeholder="Current Password"
-              className="input input-bordered w-full mb-2"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="New Password"
+              className="input input-bordered w-full mb-2 text-base-content placeholder:text-base-content/60"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
               required
             />
             <input
               type="password"
-              placeholder="New Password"
-              className="input input-bordered w-full mb-2"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Current Password"
+              className="input input-bordered w-full mb-2 text-base-content placeholder:text-base-content/60"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
               required
-              minLength={6}
             />
             <button 
               type="submit" 

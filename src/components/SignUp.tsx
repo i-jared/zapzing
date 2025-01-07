@@ -36,21 +36,21 @@ const SignUp: React.FC<SignUpProps> = ({ onPageChange }) => {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Create Account</h2>
+      <h2 className="text-2xl font-bold mb-6 text-base-content">Create Account</h2>
+      {error && (
+        <div className="alert alert-error mb-4">
+          <span className="text-error-content">{error}</span>
+        </div>
+      )}
       <form onSubmit={handleSubmit}>
-        {error && (
-          <div className="alert alert-error mb-4">
-            <span>{error}</span>
-          </div>
-        )}
         <div className="form-control">
           <label className="label">
-            <span className="label-text">Email</span>
+            <span className="label-text text-base-content">Email</span>
           </label>
           <input
             type="email"
             placeholder="email@example.com"
-            className="input input-bordered"
+            className="input input-bordered text-base-content placeholder:text-base-content/60"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -58,12 +58,12 @@ const SignUp: React.FC<SignUpProps> = ({ onPageChange }) => {
         </div>
         <div className="form-control mt-4">
           <label className="label">
-            <span className="label-text">Password</span>
+            <span className="label-text text-base-content">Password</span>
           </label>
           <input
             type="password"
             placeholder="********"
-            className="input input-bordered"
+            className="input input-bordered text-base-content placeholder:text-base-content/60"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -71,12 +71,12 @@ const SignUp: React.FC<SignUpProps> = ({ onPageChange }) => {
         </div>
         <div className="form-control mt-4">
           <label className="label">
-            <span className="label-text">Confirm Password</span>
+            <span className="label-text text-base-content">Confirm Password</span>
           </label>
           <input
             type="password"
             placeholder="********"
-            className="input input-bordered"
+            className="input input-bordered text-base-content placeholder:text-base-content/60"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required

@@ -31,17 +31,17 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   onSwitchWorkspace
 }) => {
   return (
-    <div className="w-80 bg-base-300 flex flex-col h-full border-l border-base-content/10 overflow-y-auto z-[20] relative">
+    <div className="w-80 bg-base-100 flex flex-col h-full border-l border-base-content/10 overflow-y-auto z-[20] relative">
       {/* Workspace Title */}
       <div className="p-4 border-b border-base-content/10">
-        <h2 className="text-xl font-bold">{workspaceName}</h2>
+        <h2 className="text-xl font-bold text-base-content">{workspaceName}</h2>
       </div>
 
       {/* Add User Widget */}
       <div className="p-4 border-b border-base-content/10">
         {!isEmailVerified ? (
           <div className="alert alert-warning">
-            <span>Please verify your email to invite users.</span>
+            <span className="text-warning-content">Please verify your email to invite users.</span>
           </div>
         ) : (
           <button 
@@ -58,10 +58,10 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       <div className="flex-1 overflow-y-auto p-4">
         {/* Channel Members */}
         <div className="mb-6">
-          <h3 className="font-bold mb-4">Channel Members</h3>
+          <h3 className="font-bold mb-4 text-base-content">Channel Members</h3>
           <div className="space-y-2">
             {channelMembers.length === 0 ? (
-              <div className="text-sm opacity-50">No members in this channel</div>
+              <div className="text-sm text-base-content/50">No members in this channel</div>
             ) : (
               channelMembers.map((member) => (
                 <div key={member.uid} className="flex items-center gap-2">
@@ -77,12 +77,12 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                     )}
                   </div>
                   <div className="flex flex-col">
-                    <span className="font-medium">
+                    <span className="font-medium text-base-content">
                       {member.displayName || member.email}
                       {member.isCurrentUser && " (you)"}
                     </span>
                     {member.displayName && (
-                      <span className="text-xs opacity-70">{member.email}</span>
+                      <span className="text-xs text-base-content/70">{member.email}</span>
                     )}
                   </div>
                 </div>
@@ -94,25 +94,25 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         {/* Invited Users Collapse */}
         <div className="border-t border-base-content/10 pt-4">
           <button
-            className="w-full py-2 flex items-center justify-between hover:bg-base-200 rounded-lg px-2"
+            className="w-full py-2 flex items-center justify-between bg-base-100 hover:bg-base-200 rounded-lg px-2 text-base-content"
             onClick={onToggleInvitedUsers}
           >
             <span className="font-bold">Invited Users</span>
             {isInvitedUsersExpanded ? <FaChevronDown /> : <FaChevronRight />}
           </button>
           {isInvitedUsersExpanded && (
-            <div className="mt-2 space-y-2">
+            <div className="mt-2 space-y-2 bg-base-100 rounded-lg p-2">
               {invitedUsers.length === 0 ? (
-                <div className="text-sm opacity-50">No pending invites</div>
+                <div className="text-sm text-base-content/50">No pending invites</div>
               ) : (
                 invitedUsers.map((email, index) => (
-                  <div key={index} className="flex items-center gap-2">
+                  <div key={index} className="flex items-center gap-2 hover:bg-base-200 p-2 rounded-lg">
                     <div className="avatar placeholder">
                       <div className="bg-neutral text-neutral-content rounded-full w-8 h-8 flex items-center justify-center">
                         <FaUser className="w-4 h-4" />
                       </div>
                     </div>
-                    <span>{email}</span>
+                    <span className="text-base-content">{email}</span>
                   </div>
                 ))
               )}

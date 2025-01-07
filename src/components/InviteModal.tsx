@@ -39,16 +39,16 @@ const InviteModal: React.FC<InviteModalProps> = ({ onInvite }) => {
   return (
     <dialog id="invite-modal" className="modal">
       <div className="modal-box">
-        <h3 className="font-bold text-lg mb-4">Invite to Workspace</h3>
+        <h3 className="font-bold text-lg text-base-content">Invite to Workspace</h3>
         <form onSubmit={handleInvite}>
           <div className="form-control">
             <label className="label">
-              <span className="label-text">Email Address</span>
+              <span className="label-text text-base-content">Email Address</span>
             </label>
             <input
               type="email"
               placeholder="colleague@company.com"
-              className="input input-bordered w-full"
+              className="input input-bordered w-full text-base-content placeholder:text-base-content/60"
               value={inviteEmail}
               onChange={(e) => {
                 setInviteEmail(e.target.value);
@@ -61,13 +61,13 @@ const InviteModal: React.FC<InviteModalProps> = ({ onInvite }) => {
           
           {inviteError && (
             <div className="alert alert-error mt-4">
-              <span>{inviteError}</span>
+              <span className="text-error-content">{inviteError}</span>
             </div>
           )}
           
           {inviteSuccess && (
             <div className="alert alert-success mt-4">
-              <span>{inviteSuccess}</span>
+              <span className="text-success-content">{inviteSuccess}</span>
             </div>
           )}
 

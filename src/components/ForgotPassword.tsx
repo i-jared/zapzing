@@ -29,26 +29,26 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onPageChange }) => {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Reset Password</h2>
+      <h2 className="text-2xl font-bold mb-6 text-base-content">Reset Password</h2>
       {error && (
         <div className="alert alert-error mb-4">
-          <span>{error}</span>
+          <span className="text-error-content">{error}</span>
         </div>
       )}
       {message && (
         <div className="alert alert-success mb-4">
-          <span>{message}</span>
+          <span className="text-success-content">{message}</span>
         </div>
       )}
       <form onSubmit={handleSubmit}>
         <div className="form-control mb-6">
           <label className="label">
-            <span className="label-text">Email</span>
+            <span className="label-text text-base-content">Email</span>
           </label>
           <input
             type="email"
             placeholder="email@example.com"
-            className="input input-bordered w-full"
+            className="input input-bordered w-full text-base-content placeholder:text-base-content/60"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required

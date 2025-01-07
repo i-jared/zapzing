@@ -192,12 +192,12 @@ const Workspaces: React.FC = () => {
       <div className="flex-1 p-8 flex justify-center">
         <div className="w-full max-w-5xl">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-            <h1 className="text-3xl font-bold">Your Workspaces</h1>
+            <h1 className="text-3xl font-bold text-base-content">Your Workspaces</h1>
             <form onSubmit={handleJoinWorkspace} className="join">
               <input
                 type="text"
                 placeholder="Enter workspace ID"
-                className="input input-bordered join-item"
+                className="input input-bordered join-item text-base-content placeholder:text-base-content/60"
                 value={workspaceId}
                 onChange={(e) => {
                   setWorkspaceId(e.target.value);
@@ -223,7 +223,7 @@ const Workspaces: React.FC = () => {
           {workspaces.length === 0 ? (
             <div className="card bg-base-100 shadow-xl">
               <div className="card-body text-center">
-                <h2 className="card-title justify-center">No Workspaces Yet</h2>
+                <h2 className="card-title justify-center text-base-content">No Workspaces Yet</h2>
                 <p className="text-base-content/70">Create your first workspace or join an existing one!</p>
               </div>
             </div>
@@ -236,7 +236,7 @@ const Workspaces: React.FC = () => {
                   onClick={() => handleSelectWorkspace(workspace.id)}
                 >
                   <div className="card-body">
-                    <h2 className="card-title">{workspace.name}</h2>
+                    <h2 className="card-title text-base-content">{workspace.name}</h2>
                     <p className="text-base-content/70">{workspace.members.length} member{workspace.members.length !== 1 ? 's' : ''}</p>
                     <div className="card-actions justify-end mt-4">
                       <button className="btn btn-primary btn-sm">Open</button>
@@ -252,16 +252,16 @@ const Workspaces: React.FC = () => {
       {/* Create Workspace Modal */}
       <dialog id="create-workspace-modal" className="modal">
         <div className="modal-box">
-          <h3 className="font-bold text-lg mb-4">Create a Workspace</h3>
+          <h3 className="font-bold text-lg mb-4 text-base-content">Create a Workspace</h3>
           <form onSubmit={handleCreateWorkspace}>
             <div className="form-control">
               <label className="label">
-                <span className="label-text">Workspace Name</span>
+                <span className="label-text text-base-content">Workspace Name</span>
               </label>
               <input
                 type="text"
                 placeholder="e.g. My Team"
-                className="input input-bordered w-full"
+                className="input input-bordered w-full text-base-content placeholder:text-base-content/60"
                 value={newWorkspaceName}
                 onChange={(e) => setNewWorkspaceName(e.target.value)}
                 required
