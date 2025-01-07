@@ -1,0 +1,5 @@
+<SPECIAL INSTRUCTIONS>
+    Show a chain of thought to solve difficult problems that you're having a hard time with.
+    If you are working on something that didn't work the first time, look at what you did wrong the first time.
+
+</SPECIAL INSTRUCTIONS>
