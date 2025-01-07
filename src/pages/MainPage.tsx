@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar'; 
-import { FaPaperPlane, FaUser, FaBuilding, FaUserCircle, FaCamera, FaChevronDown, FaChevronRight, FaSmile } from 'react-icons/fa';
+import { FaPaperPlane, FaUser, FaBuilding, FaUserCircle, FaCamera, FaChevronDown, FaChevronRight, FaSmile, FaFile, FaVideo, FaPencilAlt, FaFileImage, FaFilePdf, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileAlt, FaDownload, FaExternalLinkAlt } from 'react-icons/fa';
 import { signOut, updateProfile, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendEmailVerification } from 'firebase/auth';
 import { auth, db, storage } from '../firebase';
 import { 
@@ -43,6 +43,13 @@ interface Message {
   channel: string;
   workspaceId: string;
   reactions?: { [key: string]: Reaction };  // emoji as key
+  attachment?: {
+    type: 'file' | 'video' | 'drawing';
+    url: string;
+    name: string;
+    size: number;
+    contentType?: string;
+  };
 }
 
 interface UserData {
@@ -68,6 +75,23 @@ interface UserActivity {
 
 // Add common emojis array
 const COMMON_EMOJIS = ['👍', '❤️', '😂', '🎉', '🚀'];
+
+// Add helper function to get file icon
+const getFileIcon = (fileName: string, contentType?: string) => {
+  if (contentType?.startsWith('image/')) return FaFileImage;
+  if (contentType?.includes('pdf')) return FaFilePdf;
+  if (contentType?.includes('word') || fileName.endsWith('.doc') || fileName.endsWith('.docx')) return FaFileWord;
+  if (contentType?.includes('excel') || fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) return FaFileExcel;
+  if (contentType?.includes('powerpoint') || fileName.endsWith('.ppt') || fileName.endsWith('.pptx')) return FaFilePowerpoint;
+  return FaFileAlt;
+};
+
+// Add helper function to format file size
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+};
 
 const MainPage: React.FC = () => {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -101,6 +125,7 @@ const MainPage: React.FC = () => {
   const [typingUsers, setTypingUsers] = useState<{[key: string]: {displayName: string | null, email: string}}>({});
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
   const [dmUserInfo, setDmUserInfo] = useState<{displayName: string | null, email: string} | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
@@ -126,7 +151,8 @@ const MainPage: React.FC = () => {
         timestamp: doc.data().timestamp?.toDate() || new Date(),
         channel: doc.data().channel,
         workspaceId: doc.data().workspaceId,
-        reactions: doc.data().reactions || {}  // Include reactions in the message data
+        reactions: doc.data().reactions || {},  // Include reactions in the message data
+        attachment: doc.data().attachment || null  // Include attachment in the message data
       }));
       setMessages(messagesData);
       setLoading(false);
@@ -616,6 +642,45 @@ const MainPage: React.FC = () => {
     }
   };
 
+  const handleFileUpload = async (file: File) => {
+    if (!auth.currentUser || !workspaceId) return;
+
+    try {
+      // Upload file to Firebase Storage
+      const storageRef = ref(storage, `attachments/${workspaceId}/${Date.now()}_${file.name}`);
+      const uploadResult = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(uploadResult.ref);
+
+      // Create message with attachment
+      const messagesRef = collection(db, 'messages');
+      await addDoc(messagesRef, {
+        text: '',
+        sender: {
+          uid: auth.currentUser.uid,
+          email: auth.currentUser.email,
+          displayName: auth.currentUser.displayName,
+          photoURL: auth.currentUser.photoURL
+        },
+        timestamp: serverTimestamp(),
+        channel: selectedChannel,
+        workspaceId,
+        attachment: {
+          type: 'file',
+          url: downloadURL,
+          name: file.name,
+          size: file.size,
+          contentType: file.type
+        }
+      });
+
+      setSelectedFile(null);
+      const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
+      if (modal) modal.close();
+    } catch (error) {
+      console.error('Error uploading file:', error);
+    }
+  };
+
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
@@ -735,7 +800,79 @@ const MainPage: React.FC = () => {
                           )}
                           <div className="text-base-content relative">
                             <div className="flex items-start">
-                              <div className="flex-1">{msg.text}</div>
+                              <div className="flex-1">
+                                {msg.text}
+                                {msg.attachment && (
+                                  <div className="mt-2 max-w-2xl">
+                                    {msg.attachment.contentType?.startsWith('image/') ? (
+                                      // Image Preview
+                                      <div className="relative group">
+                                        <img 
+                                          src={msg.attachment.url} 
+                                          alt={msg.attachment.name}
+                                          className="rounded-lg max-h-96 object-contain bg-base-200"
+                                        />
+                                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <div className="join">
+                                            <a 
+                                              href={msg.attachment.url} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer"
+                                              className="btn btn-sm join-item"
+                                              title="View full size"
+                                            >
+                                              <FaExternalLinkAlt />
+                                            </a>
+                                            <a 
+                                              href={msg.attachment.url} 
+                                              download={msg.attachment.name}
+                                              className="btn btn-sm join-item"
+                                              title="Download"
+                                            >
+                                              <FaDownload />
+                                            </a>
+                                          </div>
+                                        </div>
+                                        <div className="mt-1 text-sm opacity-70">
+                                          {msg.attachment.name} • {formatFileSize(msg.attachment.size)}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      // File Preview
+                                      <div className="bg-base-200 rounded-lg p-4 hover:bg-base-300 transition-colors group">
+                                        <div className="flex items-start gap-4">
+                                          <div className="text-4xl opacity-70">
+                                            {React.createElement(getFileIcon(msg.attachment.name, msg.attachment.contentType))}
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="font-medium truncate">{msg.attachment.name}</div>
+                                            <div className="text-sm opacity-70">{formatFileSize(msg.attachment.size)}</div>
+                                          </div>
+                                          <div className="join opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <a 
+                                              href={msg.attachment.url} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer"
+                                              className="btn btn-sm join-item"
+                                              title="View"
+                                            >
+                                              <FaExternalLinkAlt />
+                                            </a>
+                                            <a 
+                                              href={msg.attachment.url} 
+                                              download={msg.attachment.name}
+                                              className="btn btn-sm join-item"
+                                              title="Download"
+                                            >
+                                              <FaDownload />
+                                            </a>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
                             {/* Reaction Menu */}
@@ -775,8 +912,8 @@ const MainPage: React.FC = () => {
                                 {Object.entries(msg.reactions).map(([emoji, reaction]) => (
                                   <button
                                     key={emoji}
-                                    className={`btn btn-ghost h-7 gap-1 px-2 flex items-center justify-center ${
-                                      reaction.users.includes(auth.currentUser?.uid || '') ? 'btn-active' : ''
+                                    className={`btn btn-ghost !min-h-7 !h-auto py-0.5 gap-1 px-2 flex items-center justify-center ${
+                                      reaction.users.includes(auth.currentUser?.uid || '') ? 'bg-base-300 hover:bg-base-400' : ''
                                     }`}
                                     onClick={() => handleAddReaction(msg.id, emoji)}
                                   >
@@ -810,20 +947,36 @@ const MainPage: React.FC = () => {
                       {Object.keys(typingUsers).length === 1 ? 'is' : 'are'} typing...
                     </div>
                   )}
-                  <form onSubmit={handleSendMessage} className="join w-full">
-                    <button type="submit" className="btn btn-primary join-item">
-                      <FaPaperPlane />
-                    </button>
-                    <input
-                      type="text"
-                      placeholder={`Message ${isDirectMessage(selectedChannel) ? 
-                        `@${dmUserInfo?.displayName || selectedChannel}` : 
-                        `#${selectedChannel}`}`}
-                      className="input input-bordered join-item flex-1 focus:outline-none"
-                      value={message}
-                      onChange={handleMessageChange}
-                    />
-                  </form>
+                  <div className="flex gap-2">
+                    <div className="join">
+                      <button type="button" className="btn btn-ghost join-item" onClick={() => {
+                        const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
+                        if (modal) modal.showModal();
+                      }}>
+                        <FaFile className="w-5 h-5" />
+                      </button>
+                      <button type="button" className="btn btn-ghost join-item">
+                        <FaVideo className="w-5 h-5" />
+                      </button>
+                      <button type="button" className="btn btn-ghost join-item">
+                        <FaPencilAlt className="w-5 h-5" />
+                      </button>
+                    </div>
+                    <form onSubmit={handleSendMessage} className="join flex-1">
+                      <button type="submit" className="btn btn-primary join-item">
+                        <FaPaperPlane />
+                      </button>
+                      <input
+                        type="text"
+                        placeholder={`Message ${isDirectMessage(selectedChannel) ? 
+                          `@${dmUserInfo?.displayName || selectedChannel}` : 
+                          `#${selectedChannel}`}`}
+                        className="input input-bordered join-item flex-1 focus:outline-none"
+                        value={message}
+                        onChange={handleMessageChange}
+                      />
+                    </form>
+                  </div>
                 </>
               )}
             </div>
@@ -1268,6 +1421,65 @@ const MainPage: React.FC = () => {
           selectedChannel={selectedChannel}
         />
       </div>
+
+      {/* File Upload Modal */}
+      <dialog id="file-upload-modal" className="modal">
+        <div className="modal-box">
+          <h3 className="font-bold text-lg mb-4">Upload File</h3>
+          <div className="form-control">
+            {selectedFile ? (
+              <div className="flex flex-col items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <FaFile className="w-8 h-8" />
+                  <div>
+                    <div className="font-medium">{selectedFile.name}</div>
+                    <div className="text-sm opacity-70">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</div>
+                  </div>
+                </div>
+                <button 
+                  className="btn btn-primary w-full"
+                  onClick={() => handleFileUpload(selectedFile)}
+                >
+                  Send File
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-4">
+                <label className="w-full cursor-pointer">
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setSelectedFile(file);
+                    }}
+                  />
+                  <div className="border-2 border-dashed border-base-content/20 rounded-lg p-8 text-center hover:border-base-content/40 transition-colors">
+                    <FaFile className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <div className="font-medium">Click to select a file</div>
+                    <div className="text-sm opacity-70">or drag and drop</div>
+                  </div>
+                </label>
+              </div>
+            )}
+          </div>
+          <div className="modal-action">
+            <button 
+              className="btn" 
+              onClick={() => {
+                const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
+                if (modal) modal.close();
+                setSelectedFile(null);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button>close</button>
+        </form>
+      </dialog>
     </div>
   );
 };
