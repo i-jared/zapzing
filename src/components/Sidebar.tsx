@@ -65,7 +65,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
             if (!workspaceDoc.exists()) return;
 
             const memberEmails = workspaceDoc.data().members || [];
-            
+
             // First get all user documents to avoid flashing
             const userDocs = await Promise.all(
                 memberEmails.map(async (email: string) => {
@@ -139,17 +139,17 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
             query(userActivityRef),
             (snapshot) => {
                 const activeUserEmails = new Set<string>();
-                
+
                 snapshot.docs.forEach(doc => {
                     const data = doc.data();
                     const lastActive = data.lastActive?.toDate();
-                    
+
                     // Check if user was active in the last 10 minutes
                     if (lastActive && lastActive > tenMinutesAgo) {
                         activeUserEmails.add(data.email);
                     }
                 });
-                
+
                 setActiveUsers(activeUserEmails);
             }
         );
@@ -185,44 +185,29 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
 
     const filteredMembers = workspaceMembers.filter(member =>
         (member.displayName?.toLowerCase() || member.email.toLowerCase())
-        .includes(searchTerm.toLowerCase())
+            .includes(searchTerm.toLowerCase())
     );
 
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation();
     };
 
-    const handleMuteToggle = async (email: string, event: React.MouseEvent) => {
-        event.stopPropagation(); // Stop event propagation
-        if (!auth.currentUser) return;
-        try {
-            await toggleDMMute(auth.currentUser.uid, email);
-            // Close the dropdown
-            const dropdownCheckbox = event.currentTarget.closest('.dropdown')?.querySelector('[type="checkbox"]') as HTMLInputElement;
-            if (dropdownCheckbox) {
-                dropdownCheckbox.checked = false;
-            }
-        } catch (error) {
-            console.error('Error toggling mute:', error);
-        }
-    };
-
     return (
-        <div 
+        <div
             className="w-80 min-h-full bg-base-100 text-base-content shadow-2xl relative z-30 border-r border-base-300"
             onClick={handleClick}
         >
             <div className="navbar bg-base-200" onClick={handleClick}>
                 <div className="flex-1">
-                    <img 
-                        src={logoLight} 
-                        className="h-14 block dark:hidden" 
-                        alt="ZapZing Logo" 
+                    <img
+                        src={logoLight}
+                        className="h-14 block dark:hidden"
+                        alt="ZapZing Logo"
                     />
-                    <img 
-                        src={logoDark} 
-                        className="h-8 hidden dark:block" 
-                        alt="ZapZing Logo" 
+                    <img
+                        src={logoDark}
+                        className="h-8 hidden dark:block"
+                        alt="ZapZing Logo"
                     />
                 </div>
             </div>
@@ -245,23 +230,48 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                         {loading && <span className="loading loading-spinner loading-xs"></span>}
                     </div>
                     {filteredChannels.map(channel => (
-                        <li className="px-0 py-1" key={channel.id}>
+                        <li className="flex items-center px-0 py-1" key={channel.id}>
                             <button
                                 onClick={() => onChannelSelect(channel.name)}
-                                className={`${selectedChannel === channel.name ? 'bg-base-300' : ''} hover:bg-base-300`}
+                                className={`${selectedChannel === channel.name ? 'bg-base-300' : ''} w-full hover:bg-base-300 px-4 py-2 flex`}
                             >
-                                # {channel.name}
+                                <div className="flex justify-between w-full">
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-sm">#</span>
+                                        <span className="text-sm">{channel.name}</span>
+                                    </div>
+
+                                    <div className="dropdown dropdown-end ml-4">
+                                        <input type="checkbox" className="hidden peer" />
+                                        <label tabIndex={0} className="btn btn-ghost btn-sm btn-square peer-checked:btn-active">
+                                            <FaEllipsisV />
+                                        </label>
+                                        <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
+                                            <li>
+                                                <a onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (!auth.currentUser) return;
+                                                    // toggleDMMute(auth.currentUser.uid, member.email);
+                                                    // Find and close the dropdown by removing focus
+                                                    (e.currentTarget.closest('ul') as HTMLElement)?.blur();
+                                                }}>
+                                                    {currentUserData?.mutedDMs?.includes('') ? 'Unmute' : 'Mute'} Notifications
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
                             </button>
                         </li>
                     ))}
-                    
+
                     <div className="px-0 py-1">
                         {!isEmailVerified ? (
                             <div className="alert alert-warning text-sm">
                                 <span>Please verify your email to create channels.</span>
                             </div>
                         ) : (
-                            <button 
+                            <button
                                 onClick={() => {
                                     const modal = document.getElementById('create-channel-modal') as HTMLDialogElement;
                                     if (modal) modal.showModal();
@@ -280,10 +290,11 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                             <div key={member.email} className="flex items-center px-0 py-1">
                                 <button
                                     onClick={() => onChannelSelect(member.email, member.displayName || undefined)}
-                                    className={`hover:bg-base-300 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left ${selectedChannel === member.email ? 'bg-base-300' : ''}`}
+                                    className={`hover:bg-base-300 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left ${selectedChannel === member.email ? 'bg-base-300' : ''
+                                        }`}
                                 >
                                     <div className="flex justify-between items-center">
-                                        <div className="flex items-center gap-2">
+                                        <div className={`flex items-center gap-2 ${currentUserData?.mutedDMs?.includes(member.email) ? 'opacity-50' : ''}`}>
                                             <div className="avatar placeholder indicator">
                                                 {member.photoURL ? (
                                                     <div className="w-6 h-6 rounded-full">
@@ -353,9 +364,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                             </label>
                         </div>
                         <div className="modal-action">
-                            <button 
-                                type="button" 
-                                className="btn" 
+                            <button
+                                type="button"
+                                className="btn"
                                 onClick={() => {
                                     const modal = document.getElementById('create-channel-modal') as HTMLDialogElement;
                                     if (modal) modal.close();
@@ -363,8 +374,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                             >
                                 Cancel
                             </button>
-                            <button 
-                                type="submit" 
+                            <button
+                                type="submit"
                                 className={`btn btn-primary ${isCreating ? 'loading' : ''}`}
                                 disabled={isCreating || !newChannelName.trim()}
                             >
