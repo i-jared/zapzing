@@ -22,9 +22,10 @@ const users = [
 interface SidebarProps {
     onChannelSelect: (channel: string) => void;
     workspaceId: string;
+    selectedChannel: string;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId }) => {
+const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selectedChannel }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [channels, setChannels] = useState<Channel[]>([]);
     const [loading, setLoading] = useState(true);
@@ -122,7 +123,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId }) => {
                         <li className="px-0 py-1" key={channel.id}>
                             <button
                                 onClick={() => onChannelSelect(channel.name)}
-                                className="active:bg-base-300"
+                                className={`${selectedChannel === channel.name ? 'bg-base-300' : ''} hover:bg-base-300`}
                             >
                                 # {channel.name}
                             </button>
@@ -147,7 +148,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId }) => {
                         <div key={user.name} className="flex items-center px-0 py-1">
                             <button
                                 onClick={() => onChannelSelect(user.name)}
-                                className="hover:bg-base-300 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left"
+                                className={`hover:bg-base-300 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left ${selectedChannel === user.name ? 'bg-base-300' : ''}`}
                             >
                                 <div className="flex justify-between">
                                     @ {user.name}
