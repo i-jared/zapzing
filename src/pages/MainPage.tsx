@@ -85,8 +85,21 @@ const MainPage: React.FC = () => {
     message: Message;
     mentionedName: string;
   }>>([]);
+  const [currentTheme, setCurrentTheme] = useState(() => {
+    return localStorage.getItem('theme') || 'light';
+  });
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
+
+  // Effect to apply theme
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', currentTheme);
+    localStorage.setItem('theme', currentTheme);
+  }, [currentTheme]);
+
+  const handleThemeChange = (theme: string) => {
+    setCurrentTheme(theme);
+  };
 
   useEffect(() => {
     if (!workspaceId || !auth.currentUser?.email) {
@@ -1280,7 +1293,9 @@ const MainPage: React.FC = () => {
         <InviteModal onInvite={handleInviteUser} />
         <ProfileModal 
           user={auth.currentUser} 
-          onUpdateProfile={(displayName, profilePicture) => handleProfileUpdate(auth.currentUser!, displayName, profilePicture, setUsersCache)} 
+          onUpdateProfile={(displayName, profilePicture) => handleProfileUpdate(auth.currentUser!, displayName, profilePicture, setUsersCache)}
+          currentTheme={currentTheme}
+          onThemeChange={handleThemeChange}
         />
         <AccountModal 
           user={auth.currentUser}

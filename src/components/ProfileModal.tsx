@@ -1,13 +1,27 @@
 import React, { useState, useRef } from 'react';
-import { FaUser, FaCamera } from 'react-icons/fa';
+import { FaUser, FaCamera, FaPalette } from 'react-icons/fa';
 import { User } from 'firebase/auth';
 
 interface ProfileModalProps {
   user: User | null;
   onUpdateProfile: (displayName: string, profilePicture: File | null) => Promise<void>;
+  currentTheme: string;
+  onThemeChange: (theme: string) => void;
 }
 
-const ProfileModal: React.FC<ProfileModalProps> = ({ user, onUpdateProfile }) => {
+const THEMES = [
+  "light", "dark", "cupcake", "bumblebee", "emerald", "corporate", "synthwave",
+  "retro", "cyberpunk", "valentine", "halloween", "garden", "forest", "aqua",
+  "lofi", "pastel", "fantasy", "wireframe", "black", "luxury", "dracula",
+  "cmyk", "autumn", "business", "acid", "lemonade", "night", "coffee", "winter"
+];
+
+const ProfileModal: React.FC<ProfileModalProps> = ({ 
+  user, 
+  onUpdateProfile, 
+  currentTheme, 
+  onThemeChange 
+}) => {
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [profilePicture, setProfilePicture] = useState<File | null>(null);
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
@@ -85,6 +99,23 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ user, onUpdateProfile }) =>
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
             />
+
+            <label className="label mt-4">
+              <span className="label-text flex items-center gap-2">
+                <FaPalette /> Theme
+              </span>
+            </label>
+            <select 
+              className="select select-bordered w-full"
+              value={currentTheme}
+              onChange={(e) => onThemeChange(e.target.value)}
+            >
+              {THEMES.map(theme => (
+                <option key={theme} value={theme}>
+                  {theme.charAt(0).toUpperCase() + theme.slice(1)}
+                </option>
+              ))}
+            </select>
           </div>
           
           {profileError && (
