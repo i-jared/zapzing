@@ -315,6 +315,19 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                                                     {currentUserData?.mutedChannels?.includes(channel.id) ? 'Unmute' : 'Mute'} Notifications
                                                 </a>
                                             </li>
+                                            <li key="delete-channel">
+                                                <a 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const modal = document.getElementById('delete-channel-modal') as HTMLDialogElement;
+                                                        if (modal) modal.showModal();
+                                                        (e.currentTarget.closest('ul') as HTMLElement)?.blur();
+                                                    }}
+                                                    className="text-error"
+                                                >
+                                                    Delete Channel
+                                                </a>
+                                            </li>
                                         </ul>
                                     </div>
                                 </div>

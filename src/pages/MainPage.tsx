@@ -26,7 +26,8 @@ import {
   getDoc,
   getDocs,
   limit,
-  setDoc
+  setDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Message, UserData, ChannelMember, Channel, FirestoreChannel } from '../types/chat';
@@ -1371,6 +1372,38 @@ const MainPage: React.FC = () => {
           </div>
         </div>
         {/* Add this form for the backdrop */}
+        <form method="dialog" className="modal-backdrop">
+          <button>close</button>
+        </form>
+      </dialog>
+
+      {/* Channel Delete Confirmation Modal */}
+      <dialog id="delete-channel-modal" className="modal">
+        <div className="modal-box">
+          <h3 className="font-bold text-lg">Delete Channel</h3>
+          <p className="py-4">Are you sure you want to delete this channel? This action cannot be undone.</p>
+          <div className="modal-action">
+            <form method="dialog">
+              <button className="btn btn-ghost mr-2">Cancel</button>
+              <button 
+                className="btn btn-error" 
+                onClick={async () => {
+                  if (!selectedChannel) return;
+                  try {
+                    await deleteDoc(doc(db, 'channels', selectedChannel.id));
+                    setSelectedChannel(null);
+                    const modal = document.getElementById('delete-channel-modal') as HTMLDialogElement;
+                    if (modal) modal.close();
+                  } catch (error) {
+                    console.error('Error deleting channel:', error);
+                  }
+                }}
+              >
+                Delete Channel
+              </button>
+            </form>
+          </div>
+        </div>
         <form method="dialog" className="modal-backdrop">
           <button>close</button>
         </form>
