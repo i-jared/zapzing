@@ -86,6 +86,7 @@ const MessageList: React.FC<MessageListProps> = ({
           {messages.map((msg, index, filteredMessages) => (
             <div 
               key={msg.id} 
+              id={`message-${msg.id}`}
               className={`flex pl-4 group relative hover:bg-base-300/30 rounded-lg transition-all ${
                 msg.id === replyingToId ? 
                 'bg-primary/5 shadow-[0_0_0_1px_hsl(var(--p))] before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:bg-primary before:rounded-l-lg' : 

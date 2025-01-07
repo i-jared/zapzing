@@ -66,6 +66,15 @@ const MainPage: React.FC = () => {
     replies: Message[];
   } | null>(null);
   const [threadMessage, setThreadMessage] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{
+    message: Message;
+    preview: string;
+    context: string;
+  }[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const messageToScrollToRef = useRef<string | null>(null);
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
@@ -87,7 +96,7 @@ const MainPage: React.FC = () => {
       const messagesData = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
-          id: doc.id,
+        id: doc.id,
           text: data.text,
           sender: data.sender,
           timestamp: data.timestamp?.toDate() || new Date(),
@@ -616,7 +625,7 @@ const MainPage: React.FC = () => {
   // Add function to handle thread opening
   const handleOpenThread = async (messageId: string) => {
     // Get all replies for this message
-    const messagesRef = collection(db, 'messages');
+      const messagesRef = collection(db, 'messages');
     const repliesQuery = query(
       messagesRef,
       where('workspaceId', '==', workspaceId),
@@ -721,6 +730,82 @@ const MainPage: React.FC = () => {
     }
   };
 
+  // Add debounced search function
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+    setIsSearching(true);
+
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // Debounce search for 300ms
+    searchTimeoutRef.current = setTimeout(() => {
+      if (!query.trim()) {
+        setSearchResults([]);
+        setIsSearching(false);
+        return;
+      }
+
+      // Search through messages
+      const results = messages
+        .filter(msg => {
+          const searchText = msg.text.toLowerCase();
+          const searchTerms = query.toLowerCase().split(' ');
+          return searchTerms.every(term => searchText.includes(term));
+        })
+        .map(msg => ({
+          message: msg,
+          preview: msg.text.length > 100 ? msg.text.slice(0, 100) + '...' : msg.text,
+          context: isDirectMessage(msg.channel) ? 
+            `DM with ${getUserDisplayName(msg.sender.uid, msg.sender.email, usersCache, msg.sender.displayName)}` : 
+            `#${msg.channel}${msg.replyTo ? ' (in thread)' : ''}`
+        }))
+        .slice(0, 5); // Limit to 5 results
+
+      setSearchResults(results);
+      setIsSearching(false);
+    }, 300);
+  }, [messages, usersCache]);
+
+  // Add effect to handle scrolling to message
+  useEffect(() => {
+    if (messageToScrollToRef.current) {
+      const messageElement = document.getElementById(`message-${messageToScrollToRef.current}`);
+      if (messageElement) {
+        messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        messageElement.classList.add('bg-primary/10');
+        setTimeout(() => {
+          messageElement.classList.remove('bg-primary/10');
+        }, 2000);
+        messageToScrollToRef.current = null;
+      }
+    }
+  }, [messages, selectedChannel, selectedThread]); // Re-run when messages, channel, or thread changes
+
+  // Update search result handling
+  const handleSearchResultClick = useCallback(async (result: { message: Message; preview: string; context: string }) => {
+    // Switch to the correct channel
+    setSelectedChannel(result.message.channel);
+    
+    // If it's in a thread
+    if (result.message.replyTo) {
+      // Open the parent thread
+      await handleOpenThread(result.message.replyTo.threadId);
+    } else if (result.message.replyCount && result.message.replyCount > 0) {
+      // If the message has replies, open its thread
+      await handleOpenThread(result.message.id);
+    }
+    
+    // Set the message to scroll to
+    messageToScrollToRef.current = result.message.id;
+    
+    // Clear search
+    setSearchQuery('');
+    setSearchResults([]);
+  }, [setSelectedChannel, handleOpenThread]);
+
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
@@ -745,6 +830,38 @@ const MainPage: React.FC = () => {
               </h1>
             </div>
           </div>
+          
+          {/* Search Bar */}
+          <div className="flex-none dropdown dropdown-bottom dropdown-end w-96 mx-4">
+            <input
+              type="text"
+              placeholder="Search messages..."
+              className="input input-bordered w-full"
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+            />
+            {(searchResults.length > 0 || isSearching) && (
+              <div className="dropdown-content z-[100] menu bg-base-200 w-full mt-2 p-2 shadow-lg rounded-box">
+                {isSearching ? (
+                  <div className="flex items-center justify-center p-4">
+                    <span className="loading loading-spinner loading-md"></span>
+                  </div>
+                ) : (
+                  searchResults.map((result) => (
+                    <div
+                      key={result.message.id}
+                      onClick={() => handleSearchResultClick(result)}
+                      className="p-2 hover:bg-base-300 rounded-lg cursor-pointer"
+                    >
+                      <div className="text-sm font-medium">{result.preview}</div>
+                      <div className="text-xs opacity-70">{result.context}</div>
+              </div>
+                  ))
+                )}
+            </div>
+            )}
+          </div>
+
           <div className="flex-none gap-2">
             <button 
               className="btn btn-ghost btn-circle"
@@ -823,24 +940,24 @@ const MainPage: React.FC = () => {
 
             {/* Fixed Message Input */}
             <div className="absolute bottom-0 left-0 right-0 bg-base-200 p-4">
-              <MessageInput 
-                message={message}
-                isEmailVerified={isEmailVerified}
-                typingUsers={typingUsers}
-                isDirectMessage={isDirectMessage(selectedChannel)}
-                channelName={selectedChannel}
-                displayName={dmUserInfo?.displayName || null}
-                onMessageChange={handleMessageChange}
-                onSubmit={handleSendMessage}
-                onFileClick={() => {
-                  const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
-                  if (modal) modal.showModal();
-                }}
+            <MessageInput 
+              message={message}
+              isEmailVerified={isEmailVerified}
+              typingUsers={typingUsers}
+              isDirectMessage={isDirectMessage(selectedChannel)}
+              channelName={selectedChannel}
+              displayName={dmUserInfo?.displayName || null}
+              onMessageChange={handleMessageChange}
+              onSubmit={handleSendMessage}
+              onFileClick={() => {
+                const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
+                if (modal) modal.showModal();
+              }}
                 replyTo={replyingTo ? {
                   senderName: replyingTo.senderName,
                   onCancel: handleCancelReply
                 } : undefined}
-              />
+            />
             </div>
           </div>
 
@@ -852,9 +969,9 @@ const MainPage: React.FC = () => {
               invitedUsers={invitedUsers}
               isInvitedUsersExpanded={isInvitedUsersExpanded}
               onInviteClick={() => {
-                const modal = document.getElementById('invite-modal') as HTMLDialogElement;
-                if (modal) modal.showModal();
-              }}
+                      const modal = document.getElementById('invite-modal') as HTMLDialogElement;
+                      if (modal) modal.showModal();
+                    }}
               onToggleInvitedUsers={() => setIsInvitedUsersExpanded(!isInvitedUsersExpanded)}
             />
           )}
@@ -873,16 +990,16 @@ const MainPage: React.FC = () => {
                 <div className="navbar bg-base-300">
                   <div className="flex-1">
                     <span className="text-lg font-semibold">Thread</span>
-                  </div>
+                              </div>
                   <div className="flex-none">
-                    <button 
+                  <button
                       className="btn btn-ghost btn-sm"
                       onClick={handleCloseThread}
-                    >
+                  >
                       ✕
-                    </button>
-                  </div>
-                </div>
+                  </button>
+                              </div>
+        </div>
 
                 {/* Thread Content */}
                 <div className="overflow-y-auto flex-1">
@@ -923,7 +1040,7 @@ const MainPage: React.FC = () => {
                       commonEmojis={COMMON_EMOJIS}
                       hideReplyButton={true}
                     />
-                  </div>
+                      </div>
                 </div>
 
                 {/* Thread Input */}
@@ -951,11 +1068,11 @@ const MainPage: React.FC = () => {
                       onCancel: handleCloseThread
                     }}
                   />
-                </div>
-              </div>
             </div>
-          )}
-        </div>
+              </div>
+              </div>
+            )}
+      </div>
 
         {/* Modals */}
         <InviteModal onInvite={handleInviteUser} />
@@ -984,17 +1101,17 @@ const MainPage: React.FC = () => {
           onFileSelect={setSelectedFile}
           onFileUpload={handleFileUpload}
           onClose={() => {
-            const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
-                    if (modal) modal.close();
-            setSelectedFile(null);
-          }}
+                const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
+                if (modal) modal.close();
+                setSelectedFile(null);
+              }}
         />
 
-        {/* Files Modal */}
-        <FileListModal 
-          messages={messages.filter(m => m.channel === selectedChannel && m.attachment)}
-          fileSearchQuery={fileSearchQuery}
-          onSearchChange={(query) => setFileSearchQuery(query)}
+      {/* Files Modal */}
+      <FileListModal 
+        messages={messages.filter(m => m.channel === selectedChannel && m.attachment)}
+        fileSearchQuery={fileSearchQuery}
+        onSearchChange={(query) => setFileSearchQuery(query)}
           getUserDisplayName={(senderId, email, displayName) => getUserDisplayName(senderId, email, usersCache, displayName)}
         />
       </div>
