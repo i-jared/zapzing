@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
-import { FaPaperPlane, FaUser, FaUsers, FaChevronDown, FaChevronRight, FaBuilding, FaCog, FaUserCircle } from 'react-icons/fa';
-import { signOut } from 'firebase/auth';
-import { auth, db } from '../firebase';
+import { FaPaperPlane, FaUser, FaUsers, FaChevronDown, FaChevronRight, FaBuilding, FaCog, FaUserCircle, FaCamera } from 'react-icons/fa';
+import { signOut, updateProfile } from 'firebase/auth';
+import { auth, db, storage } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import { 
   collection, 
@@ -16,8 +16,12 @@ import {
   doc,
   updateDoc,
   arrayUnion,
-  getDoc
+  getDoc,
+  setDoc,
+  getDocs,
+  writeBatch
 } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 interface Message {
   id: string;
@@ -25,10 +29,18 @@ interface Message {
   sender: {
     uid: string;
     email: string;
+    displayName?: string;
+    photoURL?: string;
   };
   timestamp: Date;
   channel: string;
   workspaceId: string;
+}
+
+interface UserData {
+  email: string;
+  displayName: string | null;
+  photoURL: string | null;
 }
 
 interface ChannelMember {
@@ -52,6 +64,12 @@ const MainPage: React.FC = () => {
   const [isInvitedUsersExpanded, setIsInvitedUsersExpanded] = useState(false);
   const [invitedUsers, setInvitedUsers] = useState<string[]>([]);
   const [channelMembers, setChannelMembers] = useState<ChannelMember[]>([]);
+  const [displayName, setDisplayName] = useState('');
+  const [profilePicture, setProfilePicture] = useState<File | null>(null);
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [usersCache, setUsersCache] = useState<Record<string, UserData>>({});
 
   useEffect(() => {
     if (!workspaceId) {
@@ -122,6 +140,29 @@ const MainPage: React.FC = () => {
     return () => unsubscribe();
   }, [workspaceId, selectedChannel, auth.currentUser?.email]);
 
+  useEffect(() => {
+    if (auth.currentUser) {
+      setDisplayName(auth.currentUser.displayName || '');
+    }
+  }, []);
+
+  useEffect(() => {
+    const userIds = new Set(messages.map(msg => msg.sender.uid));
+    
+    userIds.forEach(async (uid) => {
+      if (!usersCache[uid]) {
+        const userRef = doc(db, 'users', uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          setUsersCache(prev => ({
+            ...prev,
+            [uid]: userSnap.data() as UserData
+          }));
+        }
+      }
+    });
+  }, [messages]);
+
   const handleSignOut = async () => {
     try {
       await signOut(auth);
@@ -141,7 +182,9 @@ const MainPage: React.FC = () => {
         text: message.trim(),
         sender: {
           uid: auth.currentUser.uid,
-          email: auth.currentUser.email
+          email: auth.currentUser.email,
+          displayName: auth.currentUser.displayName,
+          photoURL: auth.currentUser.photoURL
         },
         timestamp: serverTimestamp(),
         channel: selectedChannel,
@@ -231,6 +274,84 @@ const MainPage: React.FC = () => {
     return ['Alice', 'Bob', 'Charlie', 'David'].includes(channelName);
   };
 
+  const handleProfileUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth.currentUser) return;
+
+    setIsUpdatingProfile(true);
+    setProfileError('');
+
+    try {
+      let photoURL = auth.currentUser.photoURL;
+
+      // Upload new profile picture if selected
+      if (profilePicture) {
+        const storageRef = ref(storage, `profile_pictures/${auth.currentUser.uid}`);
+        const uploadResult = await uploadBytes(storageRef, profilePicture);
+        photoURL = await getDownloadURL(uploadResult.ref);
+      }
+
+      // Update Auth profile
+      await updateProfile(auth.currentUser, {
+        displayName: displayName.trim() || null,
+        photoURL
+      });
+
+      // Update or create user document in Firestore
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      await setDoc(userRef, {
+        email: auth.currentUser.email,
+        displayName: displayName.trim() || null,
+        photoURL,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      // Update all messages from this user
+      const messagesRef = collection(db, 'messages');
+      const userMessagesQuery = query(
+        messagesRef,
+        where('sender.uid', '==', auth.currentUser.uid)
+      );
+
+      const snapshot = await getDocs(userMessagesQuery);
+      const batch = writeBatch(db);
+
+      snapshot.docs.forEach((doc) => {
+        batch.update(doc.ref, {
+          'sender.displayName': displayName.trim() || null,
+          'sender.photoURL': photoURL
+        });
+      });
+
+      await batch.commit();
+
+      // Close modal
+      const modal = document.getElementById('profile-modal') as HTMLDialogElement;
+      if (modal) modal.close();
+      
+      setProfilePicture(null);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      setProfileError('Failed to update profile');
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  const getUserDisplayName = (senderId: string, senderEmail: string, senderDisplayName?: string) => {
+    if (usersCache[senderId]?.displayName) {
+      return usersCache[senderId].displayName;
+    }
+    return senderDisplayName || senderEmail;
+  };
+
+  const getUserPhotoURL = (senderId: string, senderPhotoURL?: string) => {
+    if (usersCache[senderId]?.photoURL) {
+      return usersCache[senderId].photoURL;
+    }
+    return senderPhotoURL;
+  };
+
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
@@ -259,7 +380,12 @@ const MainPage: React.FC = () => {
                 <FaUserCircle className="w-6 h-6" />
               </label>
               <ul tabIndex={0} className="mt-3 z-[1] p-2 shadow menu menu-sm dropdown-content bg-base-200 rounded-box w-52">
-                <li><a>Profile</a></li>
+                <li>
+                  <a onClick={() => {
+                    const modal = document.getElementById('profile-modal') as HTMLDialogElement;
+                    if (modal) modal.showModal();
+                  }}>Profile</a>
+                </li>
                 <li><a>Account Settings</a></li>
                 <li><a onClick={handleSignOut} className="text-error">Sign out</a></li>
               </ul>
@@ -291,18 +417,30 @@ const MainPage: React.FC = () => {
                       <div key={msg.id} className="flex pl-4">
                         <div className="w-10 flex-shrink-0">
                           {shouldShowHeader(msg, index, filteredMessages) && (
-                            <div className="avatar placeholder">
-                              <div className="bg-neutral text-neutral-content rounded-full w-10">
-                                <FaUser className="w-6 h-6" />
-                              </div>
+                            <div className="avatar">
+                              {getUserPhotoURL(msg.sender.uid, msg.sender.photoURL) ? (
+                                <div className="w-10 rounded-full">
+                                  <img src={getUserPhotoURL(msg.sender.uid, msg.sender.photoURL) || ''} alt="Profile" />
+                                </div>
+                              ) : (
+                                <div className="placeholder">
+                                  <div className="bg-neutral text-neutral-content rounded-full w-10">
+                                    <FaUser className="w-6 h-6" />
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
                         <div className="flex-1 min-w-0 ml-4">
                           {shouldShowHeader(msg, index, filteredMessages) && (
                             <div className="flex items-baseline mb-1">
-                              <span className="font-bold">{msg.sender.email}</span>
-                              <time className="text-xs opacity-50 ml-2">{formatTime(msg.timestamp)}</time>
+                              <span className="font-bold">
+                                {getUserDisplayName(msg.sender.uid, msg.sender.email, msg.sender.displayName)}
+                              </span>
+                              <time className="text-xs opacity-50 ml-2">
+                                {formatTime(msg.timestamp)}
+                              </time>
                             </div>
                           )}
                           <div className="text-base-content">{msg.text}</div>
@@ -461,6 +599,93 @@ const MainPage: React.FC = () => {
                   disabled={isInviting || !inviteEmail.trim()}
                 >
                   {isInviting ? 'Inviting...' : 'Send Invite'}
+                </button>
+              </div>
+            </form>
+          </div>
+          <form method="dialog" className="modal-backdrop">
+            <button>close</button>
+          </form>
+        </dialog>
+
+        {/* Profile Modal */}
+        <dialog id="profile-modal" className="modal">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg mb-4">Edit Profile</h3>
+            <form onSubmit={handleProfileUpdate}>
+              <div className="form-control mb-4">
+                <div className="flex flex-col items-center mb-4">
+                  <div className="avatar placeholder cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                    <div className="bg-neutral text-neutral-content rounded-full w-24 relative">
+                      {profilePicture ? (
+                        <img
+                          src={URL.createObjectURL(profilePicture)}
+                          alt="Profile preview"
+                          className="w-full h-full object-cover rounded-full"
+                        />
+                      ) : auth.currentUser?.photoURL ? (
+                        <img
+                          src={auth.currentUser.photoURL}
+                          alt="Current profile"
+                          className="w-full h-full object-cover rounded-full"
+                        />
+                      ) : (
+                        <FaUser className="w-12 h-12" />
+                      )}
+                      <div className="absolute bottom-0 right-0 bg-base-100 rounded-full p-2">
+                        <FaCamera className="w-4 h-4" />
+                      </div>
+                    </div>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    ref={fileInputRef}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setProfilePicture(file);
+                    }}
+                  />
+                </div>
+
+                <label className="label">
+                  <span className="label-text">Display Name</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Your name"
+                  className="input input-bordered w-full"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                />
+              </div>
+              
+              {profileError && (
+                <div className="alert alert-error mb-4">
+                  <span>{profileError}</span>
+                </div>
+              )}
+
+              <div className="modal-action">
+                <button 
+                  type="button" 
+                  className="btn" 
+                  onClick={() => {
+                    const modal = document.getElementById('profile-modal') as HTMLDialogElement;
+                    if (modal) modal.close();
+                    setProfilePicture(null);
+                    setProfileError('');
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className={`btn btn-primary ${isUpdatingProfile ? 'loading' : ''}`}
+                  disabled={isUpdatingProfile}
+                >
+                  {isUpdatingProfile ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>
