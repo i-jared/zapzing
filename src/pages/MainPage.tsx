@@ -43,6 +43,7 @@ const MainPage: React.FC = () => {
   const [message, setMessage] = useState('');
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [invitedUsers, setInvitedUsers] = useState<string[]>([]);
   const navigate = useNavigate();
@@ -134,57 +135,64 @@ const MainPage: React.FC = () => {
   }, [workspaceId]);
 
   useEffect(() => {
-    if (!workspaceId || !selectedChannel?.id || !auth.currentUser?.email) return;
+    if (!workspaceId || !auth.currentUser?.email) return;
 
-    console.log('Setting up message subscription for channel:', selectedChannel);
+    console.log('Setting up all messages subscription');
 
-    // If it's a temporary DM channel, don't try to fetch messages yet
-    if (selectedChannel.id.startsWith('temp_dm_')) {
-        console.log('Temporary DM channel, clearing messages');
-        setMessages([]);
-        setLoading(false);
-        return;
-    }
-
-    // Subscribe to messages collection for this workspace
+    // Subscribe to all messages in the workspace
     const messagesRef = collection(db, 'messages');
-    const messagesQuery = query(
-        messagesRef,
-        where('workspaceId', '==', workspaceId),
-        where('channel', '==', selectedChannel.id),
-        orderBy('timestamp', 'asc')
+    const allMessagesQuery = query(
+      messagesRef,
+      where('workspaceId', '==', workspaceId),
+      orderBy('timestamp', 'asc')
     );
 
-    console.log('Setting up message listener');
-    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-        console.log('Received message update:', snapshot.docs.length, 'messages');
-        const messagesData = snapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                id: doc.id,
-                text: data.text,
-                sender: data.sender,
-                timestamp: data.timestamp?.toDate() || new Date(),
-                channel: data.channel,
-                workspaceId: data.workspaceId,
-                reactions: data.reactions || {},
-                attachment: data.attachment || null,
-                replyTo: data.replyTo || null,
-                replyCount: snapshot.docs.filter(m => 
-                    m.data().replyTo?.messageId === doc.id
-                ).length
-            };
-        });
+    const unsubscribe = onSnapshot(allMessagesQuery, (snapshot) => {
+      console.log('Received all messages update:', snapshot.docs.length, 'messages');
+      const messagesData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          text: data.text,
+          sender: data.sender,
+          timestamp: data.timestamp?.toDate() || new Date(),
+          channel: data.channel,
+          workspaceId: data.workspaceId,
+          reactions: data.reactions || {},
+          attachment: data.attachment || null,
+          replyTo: data.replyTo || null,
+          replyCount: snapshot.docs.filter(m => 
+            m.data().replyTo?.messageId === doc.id
+          ).length
+        };
+      });
 
-        setMessages(messagesData);
-        setLoading(false);
+      setAllMessages(messagesData);
+      
+      // If we have a selected channel, update the filtered messages
+      if (selectedChannel) {
+        const channelMessages = messagesData.filter(msg => msg.channel === selectedChannel.id);
+        setMessages(channelMessages);
+      }
+      
+      setLoading(false);
     }, (error) => {
-        console.error("Error fetching messages:", error);
-        setLoading(false);
+      console.error("Error fetching messages:", error);
+      setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [workspaceId, selectedChannel?.id, auth.currentUser?.email]);
+  }, [workspaceId, auth.currentUser?.email]);
+
+  // Update effect to set messages when channel changes
+  useEffect(() => {
+    if (selectedChannel) {
+      const channelMessages = allMessages.filter(msg => msg.channel === selectedChannel.id);
+      setMessages(channelMessages);
+    } else {
+      setMessages([]);
+    }
+  }, [selectedChannel, allMessages]);
 
   useEffect(() => {
     const userIds = new Set(messages.map(msg => msg.sender.uid));
@@ -712,32 +720,60 @@ const MainPage: React.FC = () => {
 
     // Debounce search for 300ms
     searchTimeoutRef.current = setTimeout(async () => {
-      if (!query.trim() || !selectedChannel?.id) {
+      if (!query.trim()) {
         setSearchResults([]);
         setIsSearching(false);
         return;
       }
 
-      // Search through messages
-      const results = messages
-        .filter(msg => {
-          const searchText = msg.text.toLowerCase();
-          const searchTerms = query.toLowerCase().split(' ');
-          return searchTerms.every(term => searchText.includes(term));
-        })
-        .map(msg => ({
-          message: msg,
-          preview: msg.text.length > 100 ? msg.text.slice(0, 100) + '...' : msg.text,
-          context: selectedChannel.dm ? 
-            `DM with ${selectedChannel.name}` : 
-            `#${selectedChannel.name}${msg.replyTo ? ' (in thread)' : ''}`
-        }))
-        .slice(0, 5); // Limit to 5 results
+      try {
+        // Search through all messages
+        const results = allMessages
+          .filter(msg => {
+            const searchText = msg.text.toLowerCase();
+            const searchTerms = query.toLowerCase().split(' ');
+            return searchTerms.every(term => searchText.includes(term));
+          })
+          .map(async msg => {
+            try {
+              // Get channel info for context
+              const channelsRef = collection(db, 'channels');
+              const channelDoc = await getDoc(doc(channelsRef, msg.channel));
+              const channelData = channelDoc.exists() ? channelDoc.data() as FirestoreChannel : null;
+              
+              let context = 'Unknown Channel';
+              if (channelData) {
+                context = channelData.dm ? 
+                  `DM with ${channelData.name}` : 
+                  `#${channelData.name}`;
+              }
+              
+              return {
+                message: msg,
+                preview: msg.text.length > 100 ? msg.text.slice(0, 100) + '...' : msg.text,
+                context: `${context}${msg.replyTo ? ' (in thread)' : ''}`
+              };
+            } catch (error) {
+              console.error('Error getting channel data:', error);
+              return {
+                message: msg,
+                preview: msg.text.length > 100 ? msg.text.slice(0, 100) + '...' : msg.text,
+                context: 'Unknown Channel'
+              };
+            }
+          });
 
-      setSearchResults(results);
-      setIsSearching(false);
+        // Resolve all channel lookups
+        const resolvedResults = await Promise.all(results);
+        
+        setSearchResults(resolvedResults.slice(0, 5)); // Limit to 5 results
+      } catch (error) {
+        console.error('Error during search:', error);
+      } finally {
+        setIsSearching(false);
+      }
     }, 300);
-  }, [messages, selectedChannel]);
+  }, [allMessages]); // Depend on allMessages instead of messages
 
   // Add effect to handle scrolling to message
   useEffect(() => {
@@ -754,41 +790,6 @@ const MainPage: React.FC = () => {
     }
   }, [messages, selectedChannel, selectedThread]); // Re-run when messages, channel, or thread changes
 
-  // Update search result handling
-  const handleSearchResultClick = useCallback(async (result: { message: Message; preview: string; context: string }) => {
-    // Find the channel for this message
-    const channelsRef = collection(db, 'channels');
-    const channelDoc = await getDoc(doc(channelsRef, result.message.channel));
-    
-    if (channelDoc.exists()) {
-      const data = channelDoc.data() as FirestoreChannel;
-      const createdAt = 'toDate' in data.createdAt ? data.createdAt.toDate() : new Date(data.createdAt.seconds * 1000);
-      setSelectedChannel({
-        id: channelDoc.id,
-        name: data.name,
-        workspaceId: data.workspaceId,
-        createdAt,
-        dm: data.dm
-      });
-    }
-    
-    // If it's in a thread
-    if (result.message.replyTo) {
-      // Open the parent thread
-      await handleOpenThread(result.message.replyTo.threadId);
-    } else if (result.message.replyCount && result.message.replyCount > 0) {
-      // If the message has replies, open its thread
-      await handleOpenThread(result.message.id);
-    }
-    
-    // Set the message to scroll to
-    messageToScrollToRef.current = result.message.id;
-    
-    // Clear search
-    setSearchQuery('');
-    setSearchResults([]);
-  }, []);
-
   const handleChannelSelect = async (channel: Channel) => {
     setSelectedChannel(channel);
 
@@ -801,6 +802,81 @@ const MainPage: React.FC = () => {
       }
     }
   };
+
+  // Update search result handling
+  const handleSearchResultClick = useCallback(async (result: { message: Message; preview: string; context: string }) => {
+    console.log('handleSearchResultClick called with result:', result);
+    try {
+      // Clear search first
+      setSearchQuery('');
+      setSearchResults([]);
+
+      // Find and set the channel for this message
+      const channelsRef = collection(db, 'channels');
+      const channelDoc = await getDoc(doc(channelsRef, result.message.channel));
+      
+      if (channelDoc.exists()) {
+        const data = channelDoc.data() as FirestoreChannel;
+        const createdAt = 'toDate' in data.createdAt ? data.createdAt.toDate() : new Date(data.createdAt.seconds * 1000);
+
+        if (data.dm) {
+            console.log('DM channel found:', data.dm);
+          // For DM channels, we need to get the other user's info
+          const otherUserId = data.dm.find(id => id !== auth.currentUser?.uid);
+          if (otherUserId) {
+            const userDoc = await getDoc(doc(db, 'users', otherUserId));
+            const userData = userDoc.exists() ? userDoc.data() as UserData : null;
+            
+            const channel = {
+              id: channelDoc.id,
+              name: userData?.displayName || userData?.email || 'Unknown User',
+              workspaceId: data.workspaceId,
+              createdAt,
+              dm: data.dm
+            };
+            await handleChannelSelect(channel);
+          }
+        } else {
+          // For regular channels
+          const channel = {
+            id: channelDoc.id,
+            name: data.name,
+            workspaceId: data.workspaceId,
+            createdAt,
+            dm: data.dm
+          };
+          await handleChannelSelect(channel);
+          return;
+        }
+
+        // Handle thread logic after a short delay to ensure channel switch is complete
+        setTimeout(async () => {
+          if (result.message.replyTo) {
+            // If message is a reply, open its parent thread
+            await handleOpenThread(result.message.replyTo.threadId);
+          } else if (result.message.replyCount && result.message.replyCount > 0) {
+            // If message has replies, open its own thread
+            await handleOpenThread(result.message.id);
+          }
+
+          // Set the message to scroll to
+          messageToScrollToRef.current = result.message.id;
+          const messageElement = document.getElementById(`message-${result.message.id}`);
+          if (messageElement) {
+            messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            messageElement.classList.add('bg-primary/10');
+            setTimeout(() => {
+              messageElement.classList.remove('bg-primary/10');
+            }, 2000);
+          }
+        }, 100);
+      } else {
+        console.error('Channel not found for search result:', result.message.channel);
+      }
+    } catch (error) {
+      console.error('Error handling search result click:', error);
+    }
+  }, [handleChannelSelect, handleOpenThread]);
 
   // Add effect to fetch workspace data
   useEffect(() => {
@@ -945,7 +1021,7 @@ const MainPage: React.FC = () => {
           </div>
           
           {/* Search Bar */}
-          <div className="flex-none dropdown dropdown-bottom dropdown-end w-96 mx-4">
+          <div className="flex-none w-96 mx-4 relative">
             <input
               type="text"
               placeholder="Search messages..."
@@ -953,8 +1029,12 @@ const MainPage: React.FC = () => {
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
             />
+            
             {(searchResults.length > 0 || isSearching) && (
-              <div className="dropdown-content z-[100] menu bg-base-200 w-full mt-2 p-2 shadow-lg rounded-box">
+              <div 
+                className="absolute z-[100] bg-base-200 w-full shadow-lg rounded-box"
+                style={{ top: "calc(100% + 0.5rem)" }}
+              >
                 {isSearching ? (
                   <div className="flex items-center justify-center p-4">
                     <span className="loading loading-spinner loading-md"></span>
@@ -963,7 +1043,10 @@ const MainPage: React.FC = () => {
                   searchResults.map((result) => (
                     <div
                       key={result.message.id}
-                      onClick={() => handleSearchResultClick(result)}
+                      onClick={() => {
+                        console.log('Search result clicked:', result);
+                        handleSearchResultClick(result);
+                      }}
                       className="p-2 hover:bg-base-300 rounded-lg cursor-pointer"
                     >
                       <div className="text-sm font-medium">{result.preview}</div>

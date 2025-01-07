@@ -111,12 +111,12 @@ export const hasUnseenMessages = (channel: Channel, messages: Message[], userDat
 
   const channelId = channel.id;
   const lastSeen = userData.lastSeen[channelId];
-  if (!lastSeen) return true;
 
   const channelMessages = messages.filter(m => m.channel === channelId);
   if (channelMessages.length === 0) return false;
+  if (!lastSeen) return true;
 
   const lastMessage = channelMessages[channelMessages.length - 1];
-  const lastSeenTimestamp = lastSeen.timestamp instanceof Date ? lastSeen.timestamp : lastSeen.timestamp ? new Date(lastSeen.timestamp.seconds * 1000) : new Date();
+  const lastSeenTimestamp = lastSeen.timestamp instanceof Date ? lastSeen.timestamp : lastSeen.timestamp ? new Date(lastSeen.timestamp.seconds * 1000) : new Date(Date.now() + 1000 * 60 * 60 * 24 * 365); // One year in the future
   return lastMessage.timestamp > lastSeenTimestamp;
 }; 

@@ -3,7 +3,7 @@ import React, { ReactNode } from 'react';
 // Use the same regex as LinkListModal
 const URL_REGEX = /(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)/gi;
 // Add regex for mentions - matches @name or @email
-const MENTION_REGEX = /@([\w\s_]+?)(?:\s|$)/g;
+const MENTION_REGEX = /@(\S+?)(?:\s|$)/g;
 
 interface MessageTextProps {
   text: string;
