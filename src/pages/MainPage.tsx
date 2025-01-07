@@ -9,7 +9,7 @@ import ProfileModal from '../components/ProfileModal';
 import AccountModal from '../components/AccountModal';
 import FileUploadModal from '../components/FileUploadModal';
 import WorkspaceSidebar from '../components/WorkspaceSidebar';
-import { FaUserCircle, FaBuilding, FaFolder } from 'react-icons/fa';
+import { FaUserCircle, FaBuilding, FaFolder, FaLink } from 'react-icons/fa';
 import { signOut } from 'firebase/auth';
 import { auth, db, storage } from '../firebase';
 import { 
@@ -33,6 +33,7 @@ import { Message, UserData, ChannelMember } from '../types/chat';
 import { formatTime, shouldShowHeader, isDirectMessage, formatFileSize, getFileIcon } from '../utils/chat';
 import { getUserDisplayName, getUserPhotoURL } from '../utils/user';
 import { handleProfileUpdate, handleEmailUpdate, handlePasswordUpdate, handleResendVerification } from '../utils/auth';
+import LinkListModal from '../components/LinkListModal';
 
 const COMMON_EMOJIS = ['👍', '❤️', '😂', '🎉', '🚀'];
 
@@ -53,6 +54,7 @@ const MainPage: React.FC = () => {
   const [dmUserInfo, setDmUserInfo] = useState<{displayName: string | null, email: string} | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileSearchQuery, setFileSearchQuery] = useState('');
+  const [linkSearchQuery, setLinkSearchQuery] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const lastScrollHeightRef = useRef<number>(0);
@@ -75,6 +77,8 @@ const MainPage: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
   const messageToScrollToRef = useRef<string | null>(null);
+  const [dmDisplayName, setDmDisplayName] = useState<string | undefined>();
+  const [workspaceName, setWorkspaceName] = useState('Workspace');
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
@@ -806,6 +810,25 @@ const MainPage: React.FC = () => {
     setSearchResults([]);
   }, [setSelectedChannel, handleOpenThread]);
 
+  const handleChannelSelect = (channel: string, displayName?: string) => {
+    setSelectedChannel(channel);
+    setDmDisplayName(displayName);
+  };
+
+  // Add effect to fetch workspace data
+  useEffect(() => {
+    if (!workspaceId) return;
+
+    const workspaceRef = doc(db, 'workspaces', workspaceId);
+    const unsubscribe = onSnapshot(workspaceRef, (doc) => {
+      if (doc.exists()) {
+        setWorkspaceName(doc.data().name);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [workspaceId]);
+
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
@@ -823,21 +846,33 @@ const MainPage: React.FC = () => {
             <div className="flex flex-col">
               <h1 className="text-2xl font-bold">
                 {isDirectMessage(selectedChannel) ? (
-                  <>@{dmUserInfo?.displayName || selectedChannel}</>
+                  <>@{dmDisplayName || selectedChannel}</>
                 ) : (
                   <>#{selectedChannel}</>
                 )}
               </h1>
-              <button
-                className="btn btn-ghost btn-xs btn-square w-fit"
-                onClick={() => {
-                  const modal = document.getElementById('files-modal') as HTMLDialogElement;
-                  if (modal) modal.showModal();
-                }}
-                title="Browse files"
-              >
-                <FaFolder className="w-6 h-3" />
-              </button>
+              <div className="flex gap-1">
+                <button
+                  className="btn btn-ghost btn-xs btn-square w-fit"
+                  onClick={() => {
+                    const modal = document.getElementById('files-modal') as HTMLDialogElement;
+                    if (modal) modal.showModal();
+                  }}
+                  title="Browse files"
+                >
+                  <FaFolder className="w-6 h-3" />
+                </button>
+                <button
+                  className="btn btn-ghost btn-xs btn-square w-fit"
+                  onClick={() => {
+                    const modal = document.getElementById('links-modal') as HTMLDialogElement;
+                    if (modal) modal.showModal();
+                  }}
+                  title="Browse links"
+                >
+                  <FaLink className="w-6 h-3" />
+                </button>
+              </div>
             </div>
           </div>
           
@@ -979,10 +1014,12 @@ const MainPage: React.FC = () => {
               invitedUsers={invitedUsers}
               isInvitedUsersExpanded={isInvitedUsersExpanded}
               onInviteClick={() => {
-                      const modal = document.getElementById('invite-modal') as HTMLDialogElement;
-                      if (modal) modal.showModal();
-                    }}
+                const modal = document.getElementById('invite-modal') as HTMLDialogElement;
+                if (modal) modal.showModal();
+              }}
               onToggleInvitedUsers={() => setIsInvitedUsersExpanded(!isInvitedUsersExpanded)}
+              workspaceName={workspaceName}
+              onSwitchWorkspace={() => navigate('/')}
             />
           )}
 
@@ -1122,15 +1159,23 @@ const MainPage: React.FC = () => {
         messages={messages.filter(m => m.channel === selectedChannel && m.attachment)}
         fileSearchQuery={fileSearchQuery}
         onSearchChange={(query) => setFileSearchQuery(query)}
-          getUserDisplayName={(senderId, email, displayName) => getUserDisplayName(senderId, email, usersCache, displayName)}
-        />
+        getUserDisplayName={(senderId, email, displayName) => getUserDisplayName(senderId, email, usersCache, displayName)}
+      />
+
+      {/* Links Modal */}
+      <LinkListModal 
+        messages={messages.filter(m => m.channel === selectedChannel)}
+        linkSearchQuery={linkSearchQuery}
+        onSearchChange={(query) => setLinkSearchQuery(query)}
+        getUserDisplayName={(senderId, email, displayName) => getUserDisplayName(senderId, email, usersCache, displayName)}
+      />
       </div>
 
       {/* Sidebar */}
       <div className="drawer-side">
         <label htmlFor="main-drawer" className="drawer-overlay"></label>
         <Sidebar 
-          onChannelSelect={setSelectedChannel} 
+          onChannelSelect={handleChannelSelect} 
           workspaceId={workspaceId || ''} 
           selectedChannel={selectedChannel}
         />

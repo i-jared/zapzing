@@ -23,7 +23,7 @@ interface WorkspaceMember {
 }
 
 interface SidebarProps {
-    onChannelSelect: (channel: string) => void;
+    onChannelSelect: (channel: string, displayName?: string) => void;
     workspaceId: string;
     selectedChannel: string;
 }
@@ -47,27 +47,33 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
             if (!workspaceDoc.exists()) return;
 
             const memberEmails = workspaceDoc.data().members || [];
-            const memberPromises = memberEmails.map(async (email: string) => {
-                // Get user document from users collection
-                const usersQuery = query(
-                    collection(db, 'users'),
-                    where('email', '==', email),
-                    limit(1)
-                );
-                const userSnapshot = await getDocs(usersQuery);
-                
+            
+            // First get all user documents to avoid flashing
+            const userDocs = await Promise.all(
+                memberEmails.map(async (email: string) => {
+                    const usersQuery = query(
+                        collection(db, 'users'),
+                        where('email', '==', email),
+                        limit(1)
+                    );
+                    return getDocs(usersQuery);
+                })
+            );
+
+            const members = memberEmails.map((email: string, index: number) => {
+                const userSnapshot = userDocs[index];
                 if (!userSnapshot.empty) {
                     const userData = userSnapshot.docs[0].data();
                     return {
                         email,
                         displayName: userData.displayName,
-                        photoURL: userData.photoURL
+                        photoURL: userData.photoURL,
+                        uid: userData.uid
                     };
                 }
                 return { email };
             });
 
-            const members = await Promise.all(memberPromises);
             setWorkspaceMembers(members);
         });
 
@@ -240,7 +246,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                         member.email !== auth.currentUser?.email && (
                             <div key={member.email} className="flex items-center px-0 py-1">
                                 <button
-                                    onClick={() => onChannelSelect(member.email)}
+                                    onClick={() => onChannelSelect(member.email, member.displayName || undefined)}
                                     className={`hover:bg-base-300 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left ${selectedChannel === member.email ? 'bg-base-300' : ''}`}
                                 >
                                     <div className="flex justify-between items-center">
@@ -260,10 +266,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                                             <span>{member.displayName || member.email}</span>
                                         </div>
                                         <div className="dropdown dropdown-end">
-                                            <label tabIndex={0} className="btn btn-ghost btn-xs !h-6 !min-h-0 !w-8 px-0">
+                                            <label tabIndex={0} className="btn btn-ghost btn-xs !h-6 !min-h-0 !w-8 px-0" onClick={(e) => e.stopPropagation()}>
                                                 <FaEllipsisV className="w-3 h-3" />
                                             </label>
-                                            <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
+                                            <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52" onClick={(e) => e.stopPropagation()}>
                                                 <li><a>View Profile</a></li>
                                                 <li><a>Mute Notifications</a></li>
                                                 <li><a className="text-error">Block User</a></li>

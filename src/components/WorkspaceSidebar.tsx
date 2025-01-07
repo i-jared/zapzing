@@ -16,6 +16,8 @@ interface WorkspaceSidebarProps {
   isInvitedUsersExpanded: boolean;
   onInviteClick: () => void;
   onToggleInvitedUsers: () => void;
+  workspaceName: string;
+  onSwitchWorkspace: () => void;
 }
 
 const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
@@ -24,10 +26,17 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   invitedUsers,
   isInvitedUsersExpanded,
   onInviteClick,
-  onToggleInvitedUsers
+  onToggleInvitedUsers,
+  workspaceName,
+  onSwitchWorkspace
 }) => {
   return (
     <div className="w-80 bg-base-300 flex flex-col h-full border-l border-base-content/10 overflow-y-auto z-[20] relative">
+      {/* Workspace Title */}
+      <div className="p-4 border-b border-base-content/10">
+        <h2 className="text-xl font-bold">{workspaceName}</h2>
+      </div>
+
       {/* Add User Widget */}
       <div className="p-4 border-b border-base-content/10">
         {!isEmailVerified ? (
@@ -110,6 +119,16 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Switch Workspaces Button */}
+      <div className="p-4 border-t border-base-content/10">
+        <button 
+          className="btn btn-outline w-full"
+          onClick={onSwitchWorkspace}
+        >
+          Switch Workspaces
+        </button>
       </div>
     </div>
   );
