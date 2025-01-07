@@ -241,7 +241,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                                         <span className="text-sm">{channel.name}</span>
                                     </div>
 
-                                    <div className="dropdown dropdown-end ml-4">
+                                    <div className="dropdown dropdown-end ml-4" onClick={(e) => e.stopPropagation()}>
                                         <input type="checkbox" className="hidden peer" />
                                         <label tabIndex={0} className="btn btn-ghost btn-sm btn-square peer-checked:btn-active">
                                             <FaEllipsisV />
@@ -290,8 +290,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                             <div key={member.email} className="flex items-center px-0 py-1">
                                 <button
                                     onClick={() => onChannelSelect(member.email, member.displayName || undefined)}
-                                    className={`hover:bg-base-300 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left ${selectedChannel === member.email ? 'bg-base-300' : ''
-                                        }`}
+                                    className={`hover:bg-base-300 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left ${selectedChannel === member.email ? 'bg-base-300' : ''}`}
                                 >
                                     <div className="flex justify-between items-center">
                                         <div className={`flex items-center gap-2 ${currentUserData?.mutedDMs?.includes(member.email) ? 'opacity-50' : ''}`}>
@@ -309,7 +308,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                                             </div>
                                             <span>{member.displayName || member.email}</span>
                                         </div>
-                                        <div className="dropdown dropdown-end">
+                                        <div className="dropdown dropdown-end" onClick={(e) => e.stopPropagation()}>
                                             <input type="checkbox" className="hidden peer" />
                                             <label tabIndex={0} className="btn btn-ghost btn-sm btn-square peer-checked:btn-active">
                                                 <FaEllipsisV />

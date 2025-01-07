@@ -84,7 +84,7 @@ const MessageList: React.FC<MessageListProps> = ({
                 </div>
             ) : (
                 <div className="flex flex-col space-y-2" style={{
-                    backgroundImage: 'url("/assets/pattern.png")',
+                    backgroundImage: 'url("/assets/pattern_light.png")',
                     backgroundRepeat: 'repeat',
                     backgroundSize: '200px 200px',
                     borderRadius: '0.5rem'
