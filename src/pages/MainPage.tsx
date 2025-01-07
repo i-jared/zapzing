@@ -22,6 +22,8 @@ import {
   limit
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import data from '@emoji-mart/data'
+import Picker from '@emoji-mart/react'
 
 interface Reaction {
   emoji: string;
@@ -702,7 +704,7 @@ const MainPage: React.FC = () => {
                   {messages
                     .filter(m => m.channel === selectedChannel)
                     .map((msg, index, filteredMessages) => (
-                      <div key={msg.id} className="flex pl-4 group relative">
+                      <div key={msg.id} className="flex pl-4 group relative hover:bg-base-300/30 rounded-lg transition-colors">
                         <div className="w-10 flex-shrink-0">
                           {shouldShowHeader(msg, index, filteredMessages) && (
                             <div className="avatar">
@@ -731,13 +733,13 @@ const MainPage: React.FC = () => {
                               </time>
                             </div>
                           )}
-                          <div className="text-base-content relative group">
+                          <div className="text-base-content relative">
                             <div className="flex items-start">
                               <div className="flex-1">{msg.text}</div>
                             </div>
 
-                            {/* Reaction Menu - Absolutely positioned */}
-                            <div className="hidden group-hover:flex items-center gap-2 absolute -top-12 right-0 bg-base-200 rounded-full p-2 shadow-lg z-10">
+                            {/* Reaction Menu */}
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity items-center gap-2 absolute -top-12 right-8 bg-base-200 rounded-full p-2 shadow-lg z-10 flex">
                               {COMMON_EMOJIS.map(emoji => (
                                 <button
                                   key={emoji}
@@ -751,20 +753,18 @@ const MainPage: React.FC = () => {
                                 <label tabIndex={0} className="btn btn-ghost btn-sm px-2 min-h-0 h-8 flex items-center justify-center">
                                   <FaSmile className="w-5 h-5" />
                                 </label>
-                                <div tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-200 rounded-box w-64">
-                                  <div className="grid grid-cols-8 gap-1">
-                                    {'👍❤️😂🎉🚀😊😍🙌💯👏🔥⭐️💫✨🌟💖💝💕💓💪🎈🎊'
-                                      .split('')
-                                      .map(emoji => (
-                                        <button
-                                          key={emoji}
-                                          className="btn btn-ghost btn-sm min-h-0 h-8 p-0 flex items-center justify-center hover:bg-base-300"
-                                          onClick={() => handleAddReaction(msg.id, emoji)}
-                                        >
-                                          <span className="text-lg leading-none">{emoji}</span>
-                                        </button>
-                                      ))}
-                                  </div>
+                                <div tabIndex={0} className="dropdown-content z-[1] shadow-lg">
+                                  <Picker 
+                                    data={data} 
+                                    onEmojiSelect={(emoji: any) => handleAddReaction(msg.id, emoji.native)}
+                                    theme="dark"
+                                    previewPosition="none"
+                                    skinTonePosition="none"
+                                    searchPosition="none"
+                                    navPosition="none"
+                                    perLine={8}
+                                    maxFrequentRows={0}
+                                  />
                                 </div>
                               </div>
                             </div>
@@ -775,7 +775,7 @@ const MainPage: React.FC = () => {
                                 {Object.entries(msg.reactions).map(([emoji, reaction]) => (
                                   <button
                                     key={emoji}
-                                    className={`btn btn-ghost btn-xs min-h-0 h-6 gap-1 px-2 flex items-center justify-center ${
+                                    className={`btn btn-ghost h-7 gap-1 px-2 flex items-center justify-center ${
                                       reaction.users.includes(auth.currentUser?.uid || '') ? 'btn-active' : ''
                                     }`}
                                     onClick={() => handleAddReaction(msg.id, emoji)}
