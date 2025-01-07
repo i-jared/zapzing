@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import Sidebar from '../components/Sidebar'; 
-import { FaPaperPlane, FaUser, FaBuilding, FaUserCircle, FaCamera, FaChevronDown, FaChevronRight, FaSmile, FaFile, FaVideo, FaPencilAlt, FaFileImage, FaFilePdf, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileAlt, FaDownload, FaExternalLinkAlt } from 'react-icons/fa';
+import Sidebar from '../components/Sidebar';
+import MessageInput from '../components/MessageInput';
+import { FaPaperPlane, FaUser, FaBuilding, FaUserCircle, FaCamera, FaChevronDown, FaChevronRight, FaSmile, FaFile, FaVideo, FaPencilAlt, FaFileImage, FaFilePdf, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileAlt, FaDownload, FaExternalLinkAlt, FaSearch } from 'react-icons/fa';
 import { signOut, updateProfile, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendEmailVerification } from 'firebase/auth';
 import { auth, db, storage } from '../firebase';
 import { 
@@ -126,6 +127,7 @@ const MainPage: React.FC = () => {
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
   const [dmUserInfo, setDmUserInfo] = useState<{displayName: string | null, email: string} | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileSearchQuery, setFileSearchQuery] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const lastScrollHeightRef = useRef<number>(0);
@@ -830,7 +832,7 @@ const MainPage: React.FC = () => {
             <div 
               ref={messagesContainerRef}
               className="absolute inset-0 overflow-y-auto flex flex-col-reverse" 
-              style={{ paddingBottom: '76px' }}
+              style={{ paddingBottom: '130px' }}
             >
               <div className="p-4">
                 {loading ? (
@@ -956,7 +958,7 @@ const MainPage: React.FC = () => {
                               </div>
 
                               {/* Reaction Menu */}
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity items-center gap-2 absolute -top-12 right-8 bg-base-200 rounded-full p-2 shadow-lg z-10 flex">
+                              <div className="opacity-0 group-hover:opacity-100 transition-opacity items-center gap-2 absolute -top-12 right-8 bg-base-200 rounded-full p-2 shadow-lg z-[10] flex">
                                 {COMMON_EMOJIS.map(emoji => (
                                   <button
                                     key={emoji}
@@ -1014,57 +1016,25 @@ const MainPage: React.FC = () => {
             </div>
 
             {/* Fixed Message Input */}
-            <div className="absolute bottom-0 left-0 right-0 bg-base-300 border-t border-base-content/10">
-              <div className="p-4">
-                {!isEmailVerified ? (
-                  <div className="alert alert-warning">
-                    <span>Please verify your email to send messages.</span>
-                  </div>
-                ) : (
-                  <>
-                    {Object.keys(typingUsers).length > 0 && (
-                      <div className="text-sm opacity-70 mb-2">
-                        {Object.values(typingUsers)
-                          .map(user => user.displayName || user.email)
-                          .join(', ')}{' '}
-                        {Object.keys(typingUsers).length === 1 ? 'is' : 'are'} typing...
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <button 
-                        type="button" 
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => {
-                          const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
-                          if (modal) modal.showModal();
-                        }}
-                      >
-                        <FaFile className="w-4 h-4" />
-                      </button>
-                      <form onSubmit={handleSendMessage} className="join flex-1">
-                        <button type="submit" className="btn btn-primary join-item">
-                          <FaPaperPlane />
-                        </button>
-                        <input
-                          type="text"
-                          placeholder={`Message ${isDirectMessage(selectedChannel) ? 
-                            `@${dmUserInfo?.displayName || selectedChannel}` : 
-                            `#${selectedChannel}`}`}
-                          className="input input-bordered join-item flex-1 focus:outline-none"
-                          value={message}
-                          onChange={handleMessageChange}
-                        />
-                      </form>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
+            <MessageInput 
+              message={message}
+              isEmailVerified={isEmailVerified}
+              typingUsers={typingUsers}
+              isDirectMessage={isDirectMessage(selectedChannel)}
+              channelName={selectedChannel}
+              displayName={dmUserInfo?.displayName || null}
+              onMessageChange={handleMessageChange}
+              onSubmit={handleSendMessage}
+              onFileClick={() => {
+                const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
+                if (modal) modal.showModal();
+              }}
+            />
           </div>
 
           {/* Right Sidebar */}
           {isRightSidebarOpen && (
-            <div className="w-80 bg-base-300 flex flex-col h-full border-l border-base-content/10 overflow-y-auto">
+            <div className="w-80 bg-base-300 flex flex-col h-full border-l border-base-content/10 overflow-y-auto z-[20] relative">
               {/* Add User Widget */}
               <div className="p-4 border-b border-base-content/10">
                 {!isEmailVerified ? (
@@ -1564,11 +1534,37 @@ const MainPage: React.FC = () => {
       {/* Files Modal */}
       <dialog id="files-modal" className="modal">
         <div className="modal-box max-w-4xl">
-          <h3 className="font-bold text-lg mb-4">Channel Files</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-lg">Channel Files</h3>
+            <div className="join">
+              <input
+                type="text"
+                placeholder="Search files..."
+                className="input input-bordered join-item w-64"
+                value={fileSearchQuery}
+                onChange={(e) => setFileSearchQuery(e.target.value)}
+              />
+              <button className="btn join-item">
+                <FaSearch className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
           <div className="overflow-y-auto max-h-[60vh]">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-h-[50vh]">
               {messages
                 .filter(m => m.channel === selectedChannel && m.attachment)
+                .filter(m => {
+                  if (!fileSearchQuery) return true;
+                  const searchLower = fileSearchQuery.toLowerCase();
+                  const fileName = m.attachment?.name.toLowerCase() || '';
+                  const fileType = m.attachment?.contentType?.toLowerCase() || '';
+                  const sharedBy = getUserDisplayName(m.sender.uid, m.sender.email, m.sender.displayName).toLowerCase();
+                  const date = m.timestamp.toLocaleDateString().toLowerCase();
+                  return fileName.includes(searchLower) || 
+                         fileType.includes(searchLower) || 
+                         sharedBy.includes(searchLower) ||
+                         date.includes(searchLower);
+                })
                 .map((msg) => (
                   <div key={msg.id} className="card bg-base-200">
                     <div className="card-body p-4">
@@ -1637,13 +1633,41 @@ const MainPage: React.FC = () => {
                     </div>
                   </div>
                 ))}
+
+              {/* Show when there are no files at all */}
+              {messages.filter(m => m.channel === selectedChannel && m.attachment).length === 0 && (
+                <div className="col-span-full flex items-center justify-center h-full">
+                  <div className="text-center opacity-50">
+                    <FaFile className="w-12 h-12 mx-auto mb-2" />
+                    <div className="text-lg font-semibold">No files shared yet</div>
+                    <div className="text-sm">Files shared in this channel will appear here</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Show when there are files but none match the search */}
+              {fileSearchQuery && messages
+                .filter(m => m.channel === selectedChannel && m.attachment)
+                .filter(m => {
+                  const searchLower = fileSearchQuery.toLowerCase();
+                  const fileName = m.attachment?.name.toLowerCase() || '';
+                  const fileType = m.attachment?.contentType?.toLowerCase() || '';
+                  const sharedBy = getUserDisplayName(m.sender.uid, m.sender.email, m.sender.displayName).toLowerCase();
+                  const date = m.timestamp.toLocaleDateString().toLowerCase();
+                  return fileName.includes(searchLower) || 
+                         fileType.includes(searchLower) || 
+                         sharedBy.includes(searchLower) ||
+                         date.includes(searchLower);
+                }).length === 0 && (
+                <div className="col-span-full flex items-center justify-center h-full">
+                  <div className="text-center opacity-50">
+                    <FaSearch className="w-12 h-12 mx-auto mb-2" />
+                    <div className="text-lg font-semibold">No matching files</div>
+                    <div className="text-sm">Try adjusting your search terms</div>
+                  </div>
+                </div>
+              )}
             </div>
-            {messages.filter(m => m.channel === selectedChannel && m.attachment).length === 0 && (
-              <div className="text-center py-8 opacity-50">
-                <FaFile className="w-12 h-12 mx-auto mb-2" />
-                <div>No files shared in this channel yet</div>
-              </div>
-            )}
           </div>
           <div className="modal-action">
             <form method="dialog">
