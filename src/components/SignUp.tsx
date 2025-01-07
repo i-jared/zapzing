@@ -3,11 +3,13 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 
+type AuthPage = 'signin' | 'signup' | 'forgot-password';
+
 interface SignUpProps {
-  onSignInClick: () => void;
+  onPageChange: (page: AuthPage) => void;
 }
 
-const SignUp: React.FC<SignUpProps> = ({ onSignInClick }) => {
+const SignUp: React.FC<SignUpProps> = ({ onPageChange }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -33,8 +35,8 @@ const SignUp: React.FC<SignUpProps> = ({ onSignInClick }) => {
   };
 
   return (
-    <>
-      <h2 className="card-title justify-center mb-4">Create Account</h2>
+    <div>
+      <h2 className="text-2xl font-bold mb-6">Create Account</h2>
       <form onSubmit={handleSubmit}>
         {error && (
           <div className="alert alert-error mb-4">
@@ -85,10 +87,13 @@ const SignUp: React.FC<SignUpProps> = ({ onSignInClick }) => {
         </div>
       </form>
       <div className="divider">OR</div>
-      <button className="btn btn-outline btn-sm" onClick={onSignInClick}>
+      <button 
+        className="btn btn-ghost w-full"
+        onClick={() => onPageChange('signin')}
+      >
         Already have an account? Sign in
       </button>
-    </>
+    </div>
   );
 };
 

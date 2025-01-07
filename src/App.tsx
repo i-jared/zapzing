@@ -3,6 +3,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
 import Authentication from './pages/Authentication.tsx';
 import MainPage from './pages/MainPage.tsx';
+import Workspaces from './pages/Workspaces.tsx';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 
 const App: React.FC = () => {
@@ -30,7 +31,8 @@ const App: React.FC = () => {
     <Router>
       <Routes>
         <Route path="/auth" element={isAuthenticated ? <Navigate to="/" /> : <Authentication />} />
-        <Route path="/" element={isAuthenticated ? <MainPage /> : <Navigate to="/auth" />} />
+        <Route path="/workspace/:workspaceId" element={isAuthenticated ? <MainPage /> : <Navigate to="/auth" />} />
+        <Route path="/" element={isAuthenticated ? <Workspaces /> : <Navigate to="/auth" />} />
       </Routes>
     </Router>
   );

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { FaSearch, FaCircle, FaEllipsisV, FaPlus } from 'react-icons/fa';
-import { collection, query, onSnapshot, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 
 interface Channel {
     id: string;
     name: string;
+    workspaceId: string;
     createdAt: Date;
 }
 
@@ -19,9 +21,10 @@ const users = [
 
 interface SidebarProps {
     onChannelSelect: (channel: string) => void;
+    workspaceId: string;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect }) => {
+const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [channels, setChannels] = useState<Channel[]>([]);
     const [loading, setLoading] = useState(true);
@@ -29,14 +32,21 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect }) => {
     const [isCreating, setIsCreating] = useState(false);
 
     useEffect(() => {
-        // Subscribe to channels collection
+        if (!workspaceId) return;
+
+        // Subscribe to channels for this workspace
         const channelsRef = collection(db, 'channels');
-        const channelsQuery = query(channelsRef, orderBy('createdAt', 'asc'));
+        const channelsQuery = query(
+            channelsRef,
+            where('workspaceId', '==', workspaceId),
+            orderBy('createdAt', 'asc')
+        );
 
         const unsubscribe = onSnapshot(channelsQuery, (snapshot) => {
             const channelsData = snapshot.docs.map(doc => ({
                 id: doc.id,
                 name: doc.data().name,
+                workspaceId: doc.data().workspaceId,
                 createdAt: doc.data().createdAt?.toDate() || new Date(),
             }));
             setChannels(channelsData);
@@ -47,7 +57,29 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect }) => {
         });
 
         return () => unsubscribe();
-    }, []);
+    }, [workspaceId]);
+
+    const handleCreateChannel = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newChannelName.trim() || !workspaceId) return;
+
+        setIsCreating(true);
+        try {
+            const channelsRef = collection(db, 'channels');
+            await addDoc(channelsRef, {
+                name: newChannelName.trim().toLowerCase(),
+                workspaceId,
+                createdAt: serverTimestamp()
+            });
+            setNewChannelName('');
+            const modal = document.getElementById('create-channel-modal') as HTMLDialogElement;
+            if (modal) modal.close();
+        } catch (error) {
+            console.error('Error creating channel:', error);
+        } finally {
+            setIsCreating(false);
+        }
+    };
 
     const filteredChannels = channels.filter(channel =>
         channel.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -56,28 +88,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect }) => {
     const filteredUsers = users.filter(user =>
         user.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
-
-    const handleCreateChannel = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newChannelName.trim()) return;
-
-        setIsCreating(true);
-        try {
-            const channelsRef = collection(db, 'channels');
-            await addDoc(channelsRef, {
-                name: newChannelName.trim().toLowerCase(),
-                createdAt: serverTimestamp()
-            });
-            setNewChannelName('');
-            // Close modal by clicking the modal-backdrop
-            const modalBackdrop = document.getElementById('create-channel-modal') as HTMLDialogElement;
-            if (modalBackdrop) modalBackdrop.close();
-        } catch (error) {
-            console.error('Error creating channel:', error);
-        } finally {
-            setIsCreating(false);
-        }
-    };
 
     return (
         <div className="w-80 min-h-full bg-base-100 text-base-content shadow-2xl relative z-30 border-r border-base-300">
@@ -161,6 +171,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect }) => {
                 </div>
             </div>
 
+            {/* Create Channel Modal */}
             <dialog id="create-channel-modal" className="modal">
                 <div className="modal-box">
                     <h3 className="font-bold text-lg mb-4">Create a Channel</h3>

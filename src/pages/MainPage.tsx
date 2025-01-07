@@ -1,17 +1,23 @@
 import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
-import { FaPaperPlane, FaUser } from 'react-icons/fa';
+import { FaPaperPlane, FaUser, FaUserPlus } from 'react-icons/fa';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import { 
   collection, 
   query, 
-  orderBy, 
+  orderBy,
+  where, 
   onSnapshot, 
   addDoc, 
   serverTimestamp,
-  Timestamp 
+  Timestamp,
+  doc,
+  updateDoc,
+  arrayUnion,
+  getDoc
 } from 'firebase/firestore';
 
 interface Message {
@@ -23,19 +29,34 @@ interface Message {
   };
   timestamp: Date;
   channel: string;
+  workspaceId: string;
 }
 
 const MainPage: React.FC = () => {
+  const { workspaceId } = useParams<{ workspaceId: string }>();
   const [message, setMessage] = useState('');
   const [selectedChannel, setSelectedChannel] = useState('general');
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [isInviting, setIsInviting] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+  const [inviteSuccess, setInviteSuccess] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Subscribe to messages collection
+    if (!workspaceId) {
+      navigate('/');
+      return;
+    }
+
+    // Subscribe to messages collection for this workspace
     const messagesRef = collection(db, 'messages');
-    const messagesQuery = query(messagesRef, orderBy('timestamp', 'asc'));
+    const messagesQuery = query(
+      messagesRef,
+      where('workspaceId', '==', workspaceId),
+      orderBy('timestamp', 'asc')
+    );
 
     const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
       const messagesData = snapshot.docs.map(doc => ({
@@ -43,7 +64,8 @@ const MainPage: React.FC = () => {
         text: doc.data().text,
         sender: doc.data().sender,
         timestamp: doc.data().timestamp?.toDate() || new Date(),
-        channel: doc.data().channel
+        channel: doc.data().channel,
+        workspaceId: doc.data().workspaceId
       }));
       setMessages(messagesData);
       setLoading(false);
@@ -53,7 +75,7 @@ const MainPage: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [workspaceId, navigate]);
 
   const handleSignOut = async () => {
     try {
@@ -66,7 +88,7 @@ const MainPage: React.FC = () => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || !auth.currentUser) return;
+    if (!message.trim() || !auth.currentUser || !workspaceId) return;
 
     try {
       const messagesRef = collection(db, 'messages');
@@ -77,7 +99,8 @@ const MainPage: React.FC = () => {
           email: auth.currentUser.email
         },
         timestamp: serverTimestamp(),
-        channel: selectedChannel
+        channel: selectedChannel,
+        workspaceId
       });
       setMessage('');
     } catch (error) {
@@ -99,6 +122,66 @@ const MainPage: React.FC = () => {
     return prevMsg.sender.uid !== currentMsg.sender.uid;
   };
 
+  const handleInviteUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim() || !workspaceId || !auth.currentUser) return;
+
+    setIsInviting(true);
+    setInviteError('');
+    setInviteSuccess('');
+
+    try {
+      // Validate email format
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail.trim())) {
+        setInviteError('Please enter a valid email address');
+        return;
+      }
+
+      const workspaceRef = doc(db, 'workspaces', workspaceId);
+      const workspaceSnap = await getDoc(workspaceRef);
+
+      if (!workspaceSnap.exists()) {
+        setInviteError('Workspace not found');
+        return;
+      }
+
+      const workspaceData = workspaceSnap.data();
+      
+      // Check if user is already a member
+      if (workspaceData.members.includes(inviteEmail.trim())) {
+        setInviteError('User is already a member of this workspace');
+        return;
+      }
+
+      // Check if user is already invited
+      if (workspaceData.invitedEmails?.includes(inviteEmail.trim())) {
+        setInviteError('User has already been invited');
+        return;
+      }
+
+      // Add email to invited list
+      await updateDoc(workspaceRef, {
+        invitedEmails: arrayUnion(inviteEmail.trim())
+      });
+
+      setInviteSuccess('Invitation sent successfully');
+      setInviteEmail('');
+      
+      // Close modal after a short delay
+      setTimeout(() => {
+        const modal = document.getElementById('invite-modal') as HTMLDialogElement;
+        if (modal) modal.close();
+        setInviteSuccess('');
+      }, 2000);
+
+    } catch (error) {
+      console.error('Error inviting user:', error);
+      setInviteError('Failed to send invitation');
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
@@ -115,7 +198,16 @@ const MainPage: React.FC = () => {
           <div className="flex-1">
             <h1 className="text-2xl font-bold">#{selectedChannel}</h1>
           </div>
-          <div className="flex-none">
+          <div className="flex-none gap-2">
+            <button 
+              className="btn btn-ghost btn-circle"
+              onClick={() => {
+                const modal = document.getElementById('invite-modal') as HTMLDialogElement;
+                if (modal) modal.showModal();
+              }}
+            >
+              <FaUserPlus className="w-5 h-5" />
+            </button>
             <button className="btn btn-ghost" onClick={handleSignOut}>Sign Out</button>
           </div>
         </div>
@@ -178,12 +270,76 @@ const MainPage: React.FC = () => {
             />
           </form>
         </div>
+
+        {/* Invite Modal */}
+        <dialog id="invite-modal" className="modal">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg mb-4">Invite to Workspace</h3>
+            <form onSubmit={handleInviteUser}>
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text">Email Address</span>
+                </label>
+                <input
+                  type="email"
+                  placeholder="colleague@company.com"
+                  className="input input-bordered w-full"
+                  value={inviteEmail}
+                  onChange={(e) => {
+                    setInviteEmail(e.target.value);
+                    setInviteError('');
+                    setInviteSuccess('');
+                  }}
+                  required
+                />
+              </div>
+              
+              {inviteError && (
+                <div className="alert alert-error mt-4">
+                  <span>{inviteError}</span>
+                </div>
+              )}
+              
+              {inviteSuccess && (
+                <div className="alert alert-success mt-4">
+                  <span>{inviteSuccess}</span>
+                </div>
+              )}
+
+              <div className="modal-action">
+                <button 
+                  type="button" 
+                  className="btn" 
+                  onClick={() => {
+                    const modal = document.getElementById('invite-modal') as HTMLDialogElement;
+                    if (modal) modal.close();
+                    setInviteEmail('');
+                    setInviteError('');
+                    setInviteSuccess('');
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className={`btn btn-primary ${isInviting ? 'loading' : ''}`}
+                  disabled={isInviting || !inviteEmail.trim()}
+                >
+                  {isInviting ? 'Inviting...' : 'Send Invite'}
+                </button>
+              </div>
+            </form>
+          </div>
+          <form method="dialog" className="modal-backdrop">
+            <button>close</button>
+          </form>
+        </dialog>
       </div>
 
       {/* Sidebar */}
       <div className="drawer-side">
         <label htmlFor="main-drawer" className="drawer-overlay"></label>
-        <Sidebar onChannelSelect={setSelectedChannel} />
+        <Sidebar onChannelSelect={setSelectedChannel} workspaceId={workspaceId || ''} />
       </div>
     </div>
   );
