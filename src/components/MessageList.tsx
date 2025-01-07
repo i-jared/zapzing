@@ -2,6 +2,7 @@ import React from 'react';
 import { FaUser, FaSmile, FaExternalLinkAlt, FaDownload, FaFileImage, FaFilePdf, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileAlt, FaReply } from 'react-icons/fa';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
+import MessageText from './MessageText';
 
 interface Message {
   id: string;
@@ -124,7 +125,7 @@ const MessageList: React.FC<MessageListProps> = ({
                 <div className="text-base-content relative">
                   <div className="flex items-start">
                     <div className="flex-1">
-                      {msg.text}
+                      <MessageText text={msg.text} />
                       {msg.attachment && (
                         <div className="mt-2 max-w-2xl">
                           {msg.attachment.contentType?.startsWith('image/') ? (

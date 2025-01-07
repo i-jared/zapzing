@@ -24,6 +24,9 @@ interface Workspace {
   createdAt: Date;
 }
 
+const logoLight = '/assets/logo_light.png';
+const logoDark = '/assets/logo_dark.png';
+
 const Workspaces: React.FC = () => {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
@@ -159,7 +162,18 @@ const Workspaces: React.FC = () => {
     <div className="min-h-screen w-screen bg-base-200 flex flex-col">
       <div className="navbar bg-base-300">
         <div className="flex-1">
-          <div className="text-2xl font-bold px-4">ZapZing</div>
+          <div className="px-4">
+            <img 
+              src={logoLight} 
+              className="h-14 block dark:hidden" 
+              alt="ZapZing Logo" 
+            />
+            <img 
+              src={logoDark} 
+              className="h-8 hidden dark:block" 
+              alt="ZapZing Logo" 
+            />
+          </div>
         </div>
         <div className="flex-none px-4">
           <button 

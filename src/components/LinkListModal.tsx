@@ -21,7 +21,8 @@ interface LinkListModalProps {
   getUserDisplayName: (uid: string, email: string, displayName?: string) => string;
 }
 
-const URL_REGEX = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
+// Updated regex to catch more URL patterns
+const URL_REGEX = /(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)/gi;
 
 const LinkListModal: React.FC<LinkListModalProps> = ({
   messages,
