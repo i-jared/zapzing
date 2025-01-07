@@ -3,6 +3,8 @@ import { FaSearch, FaCircle, FaEllipsisV, FaPlus } from 'react-icons/fa';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDocs, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { auth } from '../firebase';
+import { toggleDMMute, isDMMuted } from '../utils/chat';
+import { UserData } from '../types/chat';
 
 const logoLight = '/assets/logo_light.png';
 const logoDark = '/assets/logo_dark.png';
@@ -26,9 +28,10 @@ interface SidebarProps {
     onChannelSelect: (channel: string, displayName?: string) => void;
     workspaceId: string;
     selectedChannel: string;
+    usersCache: Record<string, UserData>;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selectedChannel }) => {
+const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selectedChannel, usersCache }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [channels, setChannels] = useState<Channel[]>([]);
     const [loading, setLoading] = useState(true);
@@ -37,6 +40,21 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
     const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
     const isEmailVerified = auth.currentUser?.emailVerified ?? false;
     const [activeUsers, setActiveUsers] = useState<Set<string>>(new Set());
+    const [currentUserData, setCurrentUserData] = useState<UserData | null>(null);
+
+    // Add effect to listen for current user's data changes
+    useEffect(() => {
+        if (!auth.currentUser) return;
+
+        const userRef = doc(db, 'users', auth.currentUser.uid);
+        const unsubscribe = onSnapshot(userRef, (doc) => {
+            if (doc.exists()) {
+                setCurrentUserData(doc.data() as UserData);
+            }
+        });
+
+        return () => unsubscribe();
+    }, []);
 
     useEffect(() => {
         if (!workspaceId) return;
@@ -174,6 +192,21 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
         e.stopPropagation();
     };
 
+    const handleMuteToggle = async (email: string, event: React.MouseEvent) => {
+        event.stopPropagation(); // Stop event propagation
+        if (!auth.currentUser) return;
+        try {
+            await toggleDMMute(auth.currentUser.uid, email);
+            // Close the dropdown
+            const dropdownCheckbox = event.currentTarget.closest('.dropdown')?.querySelector('[type="checkbox"]') as HTMLInputElement;
+            if (dropdownCheckbox) {
+                dropdownCheckbox.checked = false;
+            }
+        } catch (error) {
+            console.error('Error toggling mute:', error);
+        }
+    };
+
     return (
         <div 
             className="w-80 min-h-full bg-base-100 text-base-content shadow-2xl relative z-30 border-r border-base-300"
@@ -266,12 +299,23 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                                             <span>{member.displayName || member.email}</span>
                                         </div>
                                         <div className="dropdown dropdown-end">
-                                            <label tabIndex={0} className="btn btn-ghost btn-xs !h-6 !min-h-0 !w-8 px-0" onClick={(e) => e.stopPropagation()}>
-                                                <FaEllipsisV className="w-3 h-3" />
+                                            <input type="checkbox" className="hidden peer" />
+                                            <label tabIndex={0} className="btn btn-ghost btn-sm btn-square peer-checked:btn-active">
+                                                <FaEllipsisV />
                                             </label>
-                                            <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52" onClick={(e) => e.stopPropagation()}>
+                                            <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
                                                 <li><a>View Profile</a></li>
-                                                <li><a>Mute Notifications</a></li>
+                                                <li>
+                                                    <a onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (!auth.currentUser) return;
+                                                        toggleDMMute(auth.currentUser.uid, member.email);
+                                                        // Find and close the dropdown by removing focus
+                                                        (e.currentTarget.closest('ul') as HTMLElement)?.blur();
+                                                    }}>
+                                                        {currentUserData?.mutedDMs?.includes(member.email) ? 'Unmute' : 'Mute'} Notifications
+                                                    </a>
+                                                </li>
                                                 <li><a className="text-error">Block User</a></li>
                                             </ul>
                                         </div>

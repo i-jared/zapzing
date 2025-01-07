@@ -1,24 +1,28 @@
 import { UserData } from '../types/chat';
 
+let globalUsersCache: Record<string, UserData> = {};
+
+export const setGlobalUsersCache = (cache: Record<string, UserData>) => {
+  globalUsersCache = cache;
+};
+
 export const getUserDisplayName = (
   senderId: string,
   senderEmail: string,
-  usersCache: Record<string, UserData>,
   senderDisplayName?: string
 ): string => {
-  if (usersCache[senderId]?.displayName) {
-    return usersCache[senderId].displayName;
+  if (globalUsersCache[senderId]?.displayName) {
+    return globalUsersCache[senderId].displayName;
   }
   return senderDisplayName || senderEmail;
 };
 
 export const getUserPhotoURL = (
   senderId: string,
-  usersCache: Record<string, UserData>,
   senderPhotoURL?: string
 ): string | null => {
-  if (usersCache[senderId]?.photoURL) {
-    return usersCache[senderId].photoURL;
+  if (globalUsersCache[senderId]?.photoURL) {
+    return globalUsersCache[senderId].photoURL;
   }
   return senderPhotoURL || null;
 }; 

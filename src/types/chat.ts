@@ -35,6 +35,7 @@ export interface UserData {
   email: string;
   displayName: string | null;
   photoURL: string | null;
+  mutedDMs?: string[]; // Array of email addresses of muted DMs
 }
 
 export interface ChannelMember {

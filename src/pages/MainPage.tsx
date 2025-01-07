@@ -31,7 +31,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Message, UserData, ChannelMember } from '../types/chat';
 import { formatTime, shouldShowHeader, isDirectMessage, formatFileSize, getFileIcon } from '../utils/chat';
-import { getUserDisplayName, getUserPhotoURL } from '../utils/user';
+import { getUserDisplayName, getUserPhotoURL, setGlobalUsersCache } from '../utils/user';
 import { handleProfileUpdate, handleEmailUpdate, handlePasswordUpdate, handleResendVerification } from '../utils/auth';
 import LinkListModal from '../components/LinkListModal';
 
@@ -192,6 +192,11 @@ const MainPage: React.FC = () => {
       }
     });
   }, [messages]);
+
+  // Update global users cache whenever local cache changes
+  useEffect(() => {
+    setGlobalUsersCache(usersCache);
+  }, [usersCache]);
 
   // Add effect to track user activity
   useEffect(() => {
@@ -607,7 +612,6 @@ const MainPage: React.FC = () => {
     const senderName = getUserDisplayName(
       message.sender.uid,
       message.sender.email,
-      usersCache,
       message.sender.displayName
     );
     
@@ -663,11 +667,15 @@ const MainPage: React.FC = () => {
 
   // Add wrapper functions to match MessageList prop types
   const getDisplayNameForMessage = (senderId: string, senderEmail: string, senderDisplayName?: string) => {
-    return getUserDisplayName(senderId, senderEmail, usersCache, senderDisplayName);
+    return getUserDisplayName(senderId, senderEmail, senderDisplayName);
   };
 
   const getPhotoURLForMessage = (senderId: string, senderPhotoURL?: string) => {
-    return getUserPhotoURL(senderId, usersCache, senderPhotoURL);
+    return getUserPhotoURL(senderId, senderPhotoURL);
+  };
+
+  const shouldShowHeaderForMessage = (msg: Message, index: number, messages: Message[]) => {
+    return shouldShowHeader(msg.sender.uid, index, messages.map(m => m.sender.uid));
   };
 
   const handleThreadMessageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -698,7 +706,6 @@ const MainPage: React.FC = () => {
           senderName: getUserDisplayName(
             messages.find(m => m.id === selectedThread.messageId)?.sender.uid || '',
             messages.find(m => m.id === selectedThread.messageId)?.sender.email || '',
-            usersCache,
             messages.find(m => m.id === selectedThread.messageId)?.sender.displayName
           )
         }
@@ -763,7 +770,7 @@ const MainPage: React.FC = () => {
           message: msg,
           preview: msg.text.length > 100 ? msg.text.slice(0, 100) + '...' : msg.text,
           context: isDirectMessage(msg.channel) ? 
-            `DM with ${getUserDisplayName(msg.sender.uid, msg.sender.email, usersCache, msg.sender.displayName)}` : 
+            `DM with ${getUserDisplayName(msg.sender.uid, msg.sender.email, msg.sender.displayName)}` : 
             `#${msg.channel}${msg.replyTo ? ' (in thread)' : ''}`
         }))
         .slice(0, 5); // Limit to 5 results
@@ -971,9 +978,9 @@ const MainPage: React.FC = () => {
                 channelName={selectedChannel}
                 getUserDisplayName={getDisplayNameForMessage}
                 getUserPhotoURL={getPhotoURLForMessage}
-                shouldShowHeader={(msg, index, msgs) => shouldShowHeader(msg.sender.uid, index, msgs.map(m => m.sender.uid))}
-                formatTime={formatTime}
                 handleAddReaction={handleAddReaction}
+                shouldShowHeader={shouldShowHeaderForMessage}
+                formatTime={formatTime}
                 formatFileSize={formatFileSize}
                 getFileIcon={getFileIcon}
                 commonEmojis={COMMON_EMOJIS}
@@ -1109,7 +1116,6 @@ const MainPage: React.FC = () => {
                       senderName: getUserDisplayName(
                         messages.find(m => m.id === selectedThread.messageId)?.sender.uid || '',
                         messages.find(m => m.id === selectedThread.messageId)?.sender.email || '',
-                        usersCache,
                         messages.find(m => m.id === selectedThread.messageId)?.sender.displayName
                       ),
                       onCancel: handleCloseThread
@@ -1159,7 +1165,7 @@ const MainPage: React.FC = () => {
         messages={messages.filter(m => m.channel === selectedChannel && m.attachment)}
         fileSearchQuery={fileSearchQuery}
         onSearchChange={(query) => setFileSearchQuery(query)}
-        getUserDisplayName={(senderId, email, displayName) => getUserDisplayName(senderId, email, usersCache, displayName)}
+        getUserDisplayName={getDisplayNameForMessage}
       />
 
       {/* Links Modal */}
@@ -1167,17 +1173,18 @@ const MainPage: React.FC = () => {
         messages={messages.filter(m => m.channel === selectedChannel)}
         linkSearchQuery={linkSearchQuery}
         onSearchChange={(query) => setLinkSearchQuery(query)}
-        getUserDisplayName={(senderId, email, displayName) => getUserDisplayName(senderId, email, usersCache, displayName)}
+        getUserDisplayName={getDisplayNameForMessage}
       />
       </div>
 
       {/* Sidebar */}
-      <div className="drawer-side">
+      <div className="drawer-side z-40">
         <label htmlFor="main-drawer" className="drawer-overlay"></label>
         <Sidebar 
           onChannelSelect={handleChannelSelect} 
           workspaceId={workspaceId || ''} 
           selectedChannel={selectedChannel}
+          usersCache={usersCache}
         />
       </div>
     </div>
