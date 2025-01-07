@@ -16,6 +16,7 @@ interface WorkspaceMember {
     displayName?: string | null;
     photoURL?: string | null;
     isActive?: boolean;
+    uid?: string;
 }
 
 interface SidebarProps {
@@ -98,21 +99,31 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
         return () => unsubscribe();
     }, [workspaceId]);
 
-    // Add effect to track active users
+    // Update effect to track active users
     useEffect(() => {
         if (!workspaceId) return;
 
         const userActivityRef = collection(db, 'userActivity');
-        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-        
+        const tenMinutesAgo = new Date();
+        tenMinutesAgo.setMinutes(tenMinutesAgo.getMinutes() - 10);
+
+        // Create a real-time query for active users
         const unsubscribe = onSnapshot(
-            query(userActivityRef, where('lastActive', '>', tenMinutesAgo)),
+            query(userActivityRef),
             (snapshot) => {
-                const activeUserIds = new Set<string>();
+                const activeUserEmails = new Set<string>();
+                
                 snapshot.docs.forEach(doc => {
-                    activeUserIds.add(doc.id);
+                    const data = doc.data();
+                    const lastActive = data.lastActive?.toDate();
+                    
+                    // Check if user was active in the last 10 minutes
+                    if (lastActive && lastActive > tenMinutesAgo) {
+                        activeUserEmails.add(data.email);
+                    }
                 });
-                setActiveUsers(activeUserIds);
+                
+                setActiveUsers(activeUserEmails);
             }
         );
 
