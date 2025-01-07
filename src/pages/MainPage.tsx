@@ -9,7 +9,7 @@ import ProfileModal from '../components/ProfileModal';
 import AccountModal from '../components/AccountModal';
 import FileUploadModal from '../components/FileUploadModal';
 import WorkspaceSidebar from '../components/WorkspaceSidebar';
-import { FaUserCircle, FaBuilding, FaFolder, FaLink } from 'react-icons/fa';
+import { FaUserCircle, FaBuilding, FaFolder, FaLink, FaAt } from 'react-icons/fa';
 import { signOut } from 'firebase/auth';
 import { auth, db, storage } from '../firebase';
 import { 
@@ -34,6 +34,7 @@ import { formatTime, shouldShowHeader, isDirectMessage, formatFileSize, getFileI
 import { getUserDisplayName, getUserPhotoURL, setGlobalUsersCache } from '../utils/user';
 import { handleProfileUpdate, handleEmailUpdate, handlePasswordUpdate, handleResendVerification } from '../utils/auth';
 import LinkListModal from '../components/LinkListModal';
+import MessageText from '../components/MessageText';
 
 const COMMON_EMOJIS = ['👍', '❤️', '😂', '🎉', '🚀'];
 
@@ -79,51 +80,115 @@ const MainPage: React.FC = () => {
   const messageToScrollToRef = useRef<string | null>(null);
   const [dmDisplayName, setDmDisplayName] = useState<string | undefined>();
   const [workspaceName, setWorkspaceName] = useState('Workspace');
+  const [mentions, setMentions] = useState<Array<{
+    message: Message;
+    mentionedName: string;
+  }>>([]);
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
   useEffect(() => {
-    if (!workspaceId) {
+    if (!workspaceId || !auth.currentUser?.email) {
       navigate('/');
       return;
     }
 
+    const currentUserUid = auth.currentUser.uid;
+    let unsubscribe: () => void = () => {};
+
     // Subscribe to messages collection for this workspace
     const messagesRef = collection(db, 'messages');
-    const messagesQuery = query(
-      messagesRef,
-      where('workspaceId', '==', workspaceId),
-      orderBy('timestamp', 'asc')
-    );
 
-    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-      const messagesData = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-        id: doc.id,
-          text: data.text,
-          sender: data.sender,
-          timestamp: data.timestamp?.toDate() || new Date(),
-          channel: data.channel,
-          workspaceId: data.workspaceId,
-          reactions: data.reactions || {},
-          attachment: data.attachment || null,
-          replyTo: data.replyTo || null,
-          // Count replies for this message
-          replyCount: snapshot.docs.filter(m => 
-            m.data().replyTo?.messageId === doc.id
-          ).length
-        };
+    if (isDirectMessage(selectedChannel)) {
+      // If it's an email, look up the UID first
+      if (selectedChannel.includes('@')) {
+        // Look up the UID first
+        getDocs(query(collection(db, 'users'), where('email', '==', selectedChannel)))
+          .then(snapshot => {
+            if (!snapshot.empty) {
+              const otherUserUid = snapshot.docs[0].id;
+              const dmQuery = query(
+                messagesRef,
+                where('workspaceId', '==', workspaceId),
+                orderBy('timestamp', 'asc')
+              );
+              
+              unsubscribe = setupMessageListener(dmQuery, currentUserUid, otherUserUid);
+            }
+          });
+      } else {
+        // We already have the UID
+        const dmQuery = query(
+          messagesRef,
+          where('workspaceId', '==', workspaceId),
+          orderBy('timestamp', 'asc')
+        );
+        
+        unsubscribe = setupMessageListener(dmQuery, currentUserUid, selectedChannel);
+      }
+    } else {
+      // For channels, keep the existing behavior
+      const channelQuery = query(
+        messagesRef,
+        where('workspaceId', '==', workspaceId),
+        where('channel', '==', selectedChannel),
+        orderBy('timestamp', 'asc')
+      );
+      
+      unsubscribe = setupMessageListener(channelQuery);
+    }
+
+    function setupMessageListener(query: any, currentUid?: string, otherUid?: string) {
+      return onSnapshot(query, (snapshot) => {
+        const messagesData = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            text: data.text,
+            sender: data.sender,
+            timestamp: data.timestamp?.toDate() || new Date(),
+            channel: data.channel,
+            workspaceId: data.workspaceId,
+            reactions: data.reactions || {},
+            attachment: data.attachment || null,
+            replyTo: data.replyTo || null,
+            replyCount: snapshot.docs.filter(m => 
+              m.data().replyTo?.messageId === doc.id
+            ).length
+          };
+        });
+
+        // Filter messages
+        const filteredMessages = messagesData.filter(msg => {
+          if (currentUid && otherUid) {
+            // For DMs, show messages between the two users where:
+            // 1. Current user sent to other user (channel is other's UID) OR
+            // 2. Other user sent to current user (channel is current's UID)
+            return (
+              (msg.sender.uid === currentUid && msg.channel === otherUid) ||
+              (msg.sender.uid === otherUid && msg.channel === currentUid)
+            );
+          } else {
+            // For channels, show all messages in this channel
+            return msg.channel === selectedChannel;
+          }
+        });
+
+        // Sort messages by timestamp
+        const sortedMessages = filteredMessages.sort((a, b) => 
+          a.timestamp.getTime() - b.timestamp.getTime()
+        );
+
+        setMessages(sortedMessages);
+        setLoading(false);
+      }, (error) => {
+        console.error("Error fetching messages:", error);
+        setLoading(false);
       });
-      setMessages(messagesData);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching messages:", error);
-      setLoading(false);
-    });
+    }
 
     return () => unsubscribe();
-  }, [workspaceId, navigate]);
+  }, [workspaceId, navigate, selectedChannel, auth.currentUser?.email]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -341,51 +406,55 @@ const MainPage: React.FC = () => {
 
     try {
       const messagesRef = collection(db, 'messages');
+      let recipientUid: string | null = null;
+
+      // If it's a DM and we have an email, look up the UID
+      if (isDirectMessage(selectedChannel) && selectedChannel.includes('@')) {
+        const userSnapshot = await getDocs(query(
+          collection(db, 'users'), 
+          where('email', '==', selectedChannel),
+          limit(1)
+        ));
+        
+        if (userSnapshot.empty) {
+          console.error('User not found');
+          return;
+        }
+        
+        // Use the document ID as the UID
+        recipientUid = userSnapshot.docs[0].id;
+      } else if (isDirectMessage(selectedChannel)) {
+        // If it's a DM but not an email, assume it's already a UID
+        recipientUid = selectedChannel;
+      } else {
+        // For channels, use the channel name
+        recipientUid = selectedChannel;
+      }
+
+      // Only proceed if we have a valid channel/recipient
+      if (!recipientUid) {
+        console.error('No valid recipient found');
+        return;
+      }
+
       const messageData = {
         text: message.trim(),
         sender: {
-          uid: auth.currentUser.uid,
-          email: auth.currentUser.email,
-          displayName: auth.currentUser.displayName,
-          photoURL: auth.currentUser.photoURL
+          uid: auth.currentUser.uid
         },
         timestamp: serverTimestamp(),
-        channel: selectedChannel,
+        channel: recipientUid,
         workspaceId,
-        // Add reply metadata if replying to a message
         ...(replyingTo ? {
           replyTo: {
             messageId: replyingTo.messageId,
-            threadId: replyingTo.messageId, // Use original message as thread ID
+            threadId: replyingTo.messageId,
             senderName: replyingTo.senderName
           }
         } : {})
       };
 
-      const docRef = await addDoc(messagesRef, messageData);
-      
-      // Create a new message object with the sent data
-      const newMessage: Message = {
-        id: docRef.id,
-        text: messageData.text,
-        sender: {
-          uid: auth.currentUser.uid,
-          email: auth.currentUser.email || '',
-          displayName: auth.currentUser.displayName || undefined,
-          photoURL: auth.currentUser.photoURL || undefined
-        },
-        timestamp: new Date(), // Use current time for immediate display
-        channel: messageData.channel,
-        workspaceId: messageData.workspaceId,
-        replyTo: messageData.replyTo
-      };
-
-      // Update the thread's replies immediately
-      setSelectedThread(current => current ? {
-        ...current,
-        replies: [...current.replies, newMessage]
-      } : null);
-
+      await addDoc(messagesRef, messageData);
       setMessage('');
       setReplyingTo(null);
     } catch (error) {
@@ -689,16 +758,40 @@ const MainPage: React.FC = () => {
 
     try {
       const messagesRef = collection(db, 'messages');
+      let recipientUid: string | null = null;
+
+      // If it's a DM and we have an email, look up the UID
+      if (isDirectMessage(selectedChannel) && selectedChannel.includes('@')) {
+        const userSnapshot = await getDocs(query(
+          collection(db, 'users'), 
+          where('email', '==', selectedChannel),
+          limit(1)
+        ));
+        
+        if (userSnapshot.empty) {
+          console.error('User not found');
+          return;
+        }
+        
+        recipientUid = userSnapshot.docs[0].id;
+      } else if (isDirectMessage(selectedChannel)) {
+        recipientUid = selectedChannel;
+      } else {
+        recipientUid = selectedChannel;
+      }
+
+      if (!recipientUid) {
+        console.error('No valid recipient found');
+        return;
+      }
+
       const messageData = {
         text: threadMessage.trim(),
         sender: {
-          uid: auth.currentUser.uid,
-          email: auth.currentUser.email,
-          displayName: auth.currentUser.displayName,
-          photoURL: auth.currentUser.photoURL
+          uid: auth.currentUser.uid
         },
         timestamp: serverTimestamp(),
-        channel: selectedChannel,
+        channel: recipientUid,
         workspaceId,
         replyTo: {
           messageId: selectedThread.messageId,
@@ -711,33 +804,10 @@ const MainPage: React.FC = () => {
         }
       };
 
-      const docRef = await addDoc(messagesRef, messageData);
-      
-      // Create a new message object with the sent data
-      const newMessage: Message = {
-        id: docRef.id,
-        text: messageData.text,
-        sender: {
-          uid: auth.currentUser.uid,
-          email: auth.currentUser.email || '',
-          displayName: auth.currentUser.displayName || undefined,
-          photoURL: auth.currentUser.photoURL || undefined
-        },
-        timestamp: new Date(), // Use current time for immediate display
-        channel: messageData.channel,
-        workspaceId: messageData.workspaceId,
-        replyTo: messageData.replyTo
-      };
-
-      // Update the thread's replies immediately
-      setSelectedThread(current => current ? {
-        ...current,
-        replies: [...current.replies, newMessage]
-      } : null);
-
+      await addDoc(messagesRef, messageData);
       setThreadMessage('');
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('Error sending thread message:', error);
     }
   };
 
@@ -857,6 +927,29 @@ const MainPage: React.FC = () => {
     }
   }, [selectedChannel, messages]);
 
+  // Add this effect to find mentions when messages change
+  useEffect(() => {
+    const currentUser = auth.currentUser;
+    if (!currentUser?.email) return;
+
+    const currentUserName = currentUser.displayName;
+    // Update regex to match both spaces and underscores in the name
+    const namePattern = (currentUserName || currentUser.email).replace(/\s+/g, '[\\s_]');
+    const mentionRegex = new RegExp(`@(${namePattern})(?:\\s|$)`, 'g');
+    
+    const newMentions = messages
+      .filter(msg => {
+        mentionRegex.lastIndex = 0;
+        return mentionRegex.test(msg.text);
+      })
+      .map(msg => ({
+        message: msg,
+        mentionedName: currentUserName || currentUser.email || ''
+      }));
+
+    setMentions(newMentions);
+  }, [messages, auth.currentUser]);
+
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
@@ -899,6 +992,16 @@ const MainPage: React.FC = () => {
                   title="Browse links"
                 >
                   <FaLink className="w-6 h-3" />
+                </button>
+                <button
+                  className="btn btn-ghost btn-xs btn-square w-fit"
+                  onClick={() => {
+                    const modal = document.getElementById('mentions-modal') as HTMLDialogElement;
+                    if (modal) modal.showModal();
+                  }}
+                  title="View mentions"
+                >
+                  <FaAt className="w-6 h-3" />
                 </button>
               </div>
             </div>
@@ -1030,6 +1133,10 @@ const MainPage: React.FC = () => {
                   senderName: replyingTo.senderName,
                   onCancel: handleCancelReply
                 } : undefined}
+              channelMembers={channelMembers.map(member => ({
+                displayName: member.displayName || null,
+                email: member.email
+              }))}
             />
             </div>
           </div>
@@ -1141,6 +1248,10 @@ const MainPage: React.FC = () => {
                       ),
                       onCancel: handleCloseThread
                     }}
+                    channelMembers={channelMembers.map(member => ({
+                      displayName: member.displayName || null,
+                      email: member.email
+                    }))}
                   />
             </div>
               </div>
@@ -1196,6 +1307,58 @@ const MainPage: React.FC = () => {
         onSearchChange={(query) => setLinkSearchQuery(query)}
         getUserDisplayName={getDisplayNameForMessage}
       />
+
+      {/* Mentions Modal */}
+      <dialog id="mentions-modal" className="modal">
+        <div className="modal-box">
+          <h3 className="font-bold text-lg">Mentions</h3>
+          <div className="py-4 space-y-4">
+            {mentions.length === 0 ? (
+              <p className="text-center text-base-content/70">No mentions yet</p>
+            ) : (
+              mentions.map(({ message, mentionedName }) => (
+                <div key={message.id} className="bg-base-300 p-4 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="avatar placeholder">
+                      <div className="bg-neutral text-neutral-content rounded-full w-8">
+                        <span>
+                          {(getUserDisplayName(
+                            message.sender.uid,
+                            message.sender.email,
+                            message.sender.displayName
+                          ) || '?')[0]}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="font-medium">
+                        {getUserDisplayName(
+                          message.sender.uid,
+                          message.sender.email,
+                          message.sender.displayName
+                        ) || 'Unknown User'}
+                      </span>
+                      <span className="text-xs text-base-content/70 ml-2">
+                        {formatTime(message.timestamp)}
+                      </span>
+                    </div>
+                  </div>
+                  <MessageText text={message.text} />
+                </div>
+              ))
+            )}
+          </div>
+          <div className="modal-action">
+            <form method="dialog">
+              <button className="btn">Close</button>
+            </form>
+          </div>
+        </div>
+        {/* Add this form for the backdrop */}
+        <form method="dialog" className="modal-backdrop">
+          <button>close</button>
+        </form>
+      </dialog>
       </div>
 
       {/* Sidebar */}

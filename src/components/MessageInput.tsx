@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Send, Paperclip, Smile } from 'lucide-react';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
@@ -17,7 +17,92 @@ interface MessageInputProps {
     senderName: string;
     onCancel: () => void;
   };
+  channelMembers: Array<{
+    displayName: string | null;
+    email: string;
+  }>;
 }
+
+// Add this interface for the mention popup
+interface MentionPopupProps {
+  searchText: string;
+  position: { 
+    top?: string | number;
+    bottom?: string | number;
+    left: string | number 
+  };
+  onSelect: (user: { displayName: string | null; email: string }) => void;
+  users: Array<{ displayName: string | null; email: string }>;
+}
+
+// Add the MentionPopup component
+const MentionPopup: React.FC<MentionPopupProps> = ({ searchText, position, onSelect, users }) => {
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const filteredUsers = users.filter(user => {
+    const searchLower = searchText.toLowerCase();
+    return (
+      user.displayName?.toLowerCase().includes(searchLower) ||
+      user.email.toLowerCase().includes(searchLower)
+    );
+  });
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex(prev => 
+          prev < filteredUsers.length - 1 ? prev + 1 : prev
+        );
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex(prev => prev > 0 ? prev - 1 : prev);
+      } else if (e.key === 'Enter' && filteredUsers[selectedIndex]) {
+        e.preventDefault();
+        onSelect(filteredUsers[selectedIndex]);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [filteredUsers, selectedIndex, onSelect]);
+
+  return (
+    <div 
+      className="absolute z-[100] bg-base-200 rounded-lg shadow-xl border border-base-300"
+      style={{ 
+        ...position,
+        maxHeight: '200px',
+        overflowY: 'auto',
+        minWidth: '200px'
+      }}
+    >
+      {filteredUsers.map((user, index) => (
+        <div
+          key={user.email}
+          className={`px-4 py-2 hover:bg-base-300 cursor-pointer flex items-center gap-2 ${
+            index === selectedIndex ? 'bg-base-300' : ''
+          }`}
+          onClick={() => onSelect(user)}
+        >
+          <div className="avatar placeholder">
+            <div className="bg-neutral text-neutral-content rounded-full w-8">
+              <span>{(user.displayName || user.email)[0].toUpperCase()}</span>
+            </div>
+          </div>
+          <div className="flex flex-col">
+            <span className="font-medium">{user.displayName || 'Unnamed'}</span>
+            <span className="text-xs opacity-70">{user.email}</span>
+          </div>
+        </div>
+      ))}
+      {filteredUsers.length === 0 && (
+        <div className="px-4 py-2 text-sm opacity-70">
+          No users found
+        </div>
+      )}
+    </div>
+  );
+};
 
 const MessageInput: React.FC<MessageInputProps> = ({
   message,
@@ -29,13 +114,88 @@ const MessageInput: React.FC<MessageInputProps> = ({
   onMessageChange,
   onSubmit,
   onFileClick,
-  replyTo
+  replyTo,
+  channelMembers
 }) => {
+  const [showMentionPopup, setShowMentionPopup] = useState(false);
+  const [mentionSearchText, setMentionSearchText] = useState('');
+  const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && message.trim() && isEmailVerified) {
-      e.preventDefault();
-      onSubmit(e as any);
+    if (e.key === 'Enter') {
+      setShowMentionPopup(false);  // Hide popup on Enter
+      if (message.trim() && isEmailVerified) {
+        e.preventDefault();
+        onSubmit(e as any);
+      }
     }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    const lastAtIndex = newValue.lastIndexOf('@');
+    
+    if (lastAtIndex !== -1) {
+      // Get the text after the @ symbol
+      const searchText = newValue.slice(lastAtIndex + 1);
+      
+      // Only show popup if @ is preceded by a space or is at the start
+      // AND the next character isn't a space
+      if ((lastAtIndex === 0 || newValue[lastAtIndex - 1] === ' ') && 
+          !searchText.startsWith(' ')) {
+        setMentionSearchText(searchText);
+        setShowMentionPopup(true);
+        
+        // Calculate popup position based on input caret
+        if (inputRef.current) {
+          const inputRect = inputRef.current.getBoundingClientRect();
+          const caretPosition = getCaretCoordinates(inputRef.current, lastAtIndex);
+          
+          setMentionPosition({
+            top: inputRect.bottom + window.scrollY + 5,
+            left: inputRect.left + caretPosition.left
+          });
+        }
+      } else {
+        setShowMentionPopup(false);  // Hide popup if there's a space after @
+      }
+    } else {
+      setShowMentionPopup(false);
+    }
+    
+    onMessageChange(e);
+  };
+
+  const handleMentionSelect = (user: { displayName: string | null; email: string }) => {
+    if (!inputRef.current) return;
+
+    const lastAtIndex = message.lastIndexOf('@');
+    const userName = (user.displayName || user.email).replace(/\s+/g, '_');  // Replace spaces with underscores
+    const newMessage = 
+      message.substring(0, lastAtIndex) + 
+      `@${userName} ` + 
+      message.substring(inputRef.current.selectionStart || message.length);
+
+    const event = {
+      target: { value: newMessage }
+    } as React.ChangeEvent<HTMLInputElement>;
+    
+    onMessageChange(event);
+    setShowMentionPopup(false);  // Hide popup after selection
+  };
+
+  // Helper function to get caret coordinates
+  const getCaretCoordinates = (input: HTMLInputElement, position: number) => {
+    const clone = input.cloneNode() as HTMLInputElement;
+    clone.style.position = 'absolute';
+    clone.style.visibility = 'hidden';
+    clone.style.width = `${input.offsetWidth}px`;
+    clone.value = input.value.slice(0, position);
+    document.body.appendChild(clone);
+    const rect = clone.getBoundingClientRect();
+    document.body.removeChild(clone);
+    return { left: rect.width };
   };
 
   const handleEmojiSelect = (emoji: any) => {
@@ -105,16 +265,28 @@ const MessageInput: React.FC<MessageInputProps> = ({
                   <Send className="w-5 h-5" />
                 </button>
 
-                <input
-                  type="text"
-                  placeholder={`Message ${isDirectMessage ? 
-                    `@${displayName || channelName}` : 
-                    `#${channelName}`}`}
-                  className="input input-bordered flex-grow bg-base-100"
-                  value={message}
-                  onChange={onMessageChange}
-                  onKeyPress={handleKeyPress}
-                />
+                <div className="relative flex-grow">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    placeholder={`Message ${isDirectMessage ? 
+                      `@${displayName || channelName}` : 
+                      `#${channelName}`}`}
+                    className="input input-bordered w-full bg-base-100"
+                    value={message}
+                    onChange={handleInputChange}
+                    onKeyPress={handleKeyPress}
+                  />
+
+                  {showMentionPopup && (
+                    <MentionPopup
+                      searchText={mentionSearchText}
+                      position={{ bottom: 'calc(100% + 5px)', left: 0 }}
+                      onSelect={handleMentionSelect}
+                      users={channelMembers}
+                    />
+                  )}
+                </div>
               </form>
 
               {/* Actions compartment below */}
