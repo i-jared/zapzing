@@ -34,6 +34,7 @@ interface Message {
 interface ChannelMember {
   uid: string;
   email: string;
+  isCurrentUser: boolean;
 }
 
 const MainPage: React.FC = () => {
@@ -100,24 +101,26 @@ const MainPage: React.FC = () => {
   }, [workspaceId]);
 
   useEffect(() => {
-    if (!workspaceId || !selectedChannel) return;
+    if (!workspaceId || !selectedChannel || !auth.currentUser?.email) return;
 
     // Fetch channel members
-    const channelRef = doc(db, 'workspaces', workspaceId, 'channels', selectedChannel);
-    const unsubscribe = onSnapshot(channelRef, (doc) => {
+    const workspaceRef = doc(db, 'workspaces', workspaceId);
+    const unsubscribe = onSnapshot(workspaceRef, (doc) => {
       if (doc.exists()) {
-        const memberEmails = doc.data().members || [];
+        const workspaceData = doc.data();
+        const allMembers = workspaceData.members || [];
         // Convert member emails to ChannelMember objects
-        const members: ChannelMember[] = memberEmails.map((email: string) => ({
+        const members: ChannelMember[] = allMembers.map((email: string) => ({
           uid: email, // Using email as uid for now
-          email: email
+          email: email,
+          isCurrentUser: email === auth.currentUser?.email
         }));
         setChannelMembers(members);
       }
     });
 
     return () => unsubscribe();
-  }, [workspaceId, selectedChannel]);
+  }, [workspaceId, selectedChannel, auth.currentUser?.email]);
 
   const handleSignOut = async () => {
     try {
@@ -252,10 +255,8 @@ const MainPage: React.FC = () => {
               <FaBuilding className="w-5 h-5" />
             </button>
             <div className="dropdown dropdown-end">
-              <label tabIndex={0} className="btn btn-ghost btn-circle avatar placeholder">
-                <div className="w-8 rounded-full bg-neutral text-neutral-content">
-                  <FaUserCircle className="w-5 h-5" />
-                </div>
+              <label tabIndex={0} className="btn btn-ghost btn-circle">
+                <FaUserCircle className="w-6 h-6" />
               </label>
               <ul tabIndex={0} className="mt-3 z-[1] p-2 shadow menu menu-sm dropdown-content bg-base-200 rounded-box w-52">
                 <li><a>Profile</a></li>
@@ -362,7 +363,10 @@ const MainPage: React.FC = () => {
                               <FaUser className="w-4 h-4" />
                             </div>
                           </div>
-                          <span>{member.email}</span>
+                          <span>
+                            {member.email}
+                            {member.isCurrentUser && " (you)"}
+                          </span>
                         </div>
                       ))
                     )}
