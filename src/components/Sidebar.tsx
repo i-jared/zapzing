@@ -3,7 +3,7 @@ import { FaSearch, FaCircle, FaEllipsisV, FaPlus } from 'react-icons/fa';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDocs, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { auth } from '../firebase';
-import { toggleDMMute, isDMMuted } from '../utils/chat';
+import { toggleDMMute, isDMMuted, toggleChannelMute } from '../utils/chat';
 import { UserData } from '../types/chat';
 
 const logoLight = '/assets/logo_light.png';
@@ -236,7 +236,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                                 className={`${selectedChannel === channel.name ? 'bg-base-300' : ''} w-full hover:bg-base-300 px-4 py-2 flex`}
                             >
                                 <div className="flex justify-between w-full">
-                                    <div className="flex items-center gap-1">
+                                    <div className={`flex items-center gap-1 ${currentUserData?.mutedChannels?.includes(channel.name) ? 'opacity-50' : ''}`}>
                                         <span className="text-sm">#</span>
                                         <span className="text-sm">{channel.name}</span>
                                     </div>
@@ -251,11 +251,11 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                                                 <a onClick={(e) => {
                                                     e.stopPropagation();
                                                     if (!auth.currentUser) return;
-                                                    // toggleDMMute(auth.currentUser.uid, member.email);
+                                                    toggleChannelMute(auth.currentUser.uid, channel.name);
                                                     // Find and close the dropdown by removing focus
                                                     (e.currentTarget.closest('ul') as HTMLElement)?.blur();
                                                 }}>
-                                                    {currentUserData?.mutedDMs?.includes('') ? 'Unmute' : 'Mute'} Notifications
+                                                    {currentUserData?.mutedChannels?.includes(channel.name) ? 'Unmute' : 'Mute'} Notifications
                                                 </a>
                                             </li>
                                         </ul>

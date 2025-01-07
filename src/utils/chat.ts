@@ -51,14 +51,35 @@ export const toggleDMMute = async (userUid: string, dmEmail: string): Promise<vo
   const isMuted = mutedDMs.includes(dmEmail);
 
   if (isMuted) {
-    // Unmute: remove from mutedDMs array
     await updateDoc(userRef, {
       mutedDMs: arrayRemove(dmEmail)
     });
   } else {
-    // Mute: add to mutedDMs array
     await updateDoc(userRef, {
       mutedDMs: arrayUnion(dmEmail)
+    });
+  }
+};
+
+export const toggleChannelMute = async (userUid: string, channelName: string): Promise<void> => {
+  const userRef = doc(db, 'users', userUid);
+  const userDoc = await getDoc(userRef);
+  
+  if (!userDoc.exists()) {
+    throw new Error('User document not found');
+  }
+
+  const userData = userDoc.data() as UserData;
+  const mutedChannels = userData.mutedChannels || [];
+  const isMuted = mutedChannels.includes(channelName);
+
+  if (isMuted) {
+    await updateDoc(userRef, {
+      mutedChannels: arrayRemove(channelName)
+    });
+  } else {
+    await updateDoc(userRef, {
+      mutedChannels: arrayUnion(channelName)
     });
   }
 };
@@ -66,4 +87,9 @@ export const toggleDMMute = async (userUid: string, dmEmail: string): Promise<vo
 export const isDMMuted = (userUid: string, dmEmail: string, usersCache: Record<string, UserData>): boolean => {
   const userData = usersCache[userUid];
   return userData?.mutedDMs?.includes(dmEmail) || false;
+};
+
+export const isChannelMuted = (userUid: string, channelName: string, usersCache: Record<string, UserData>): boolean => {
+  const userData = usersCache[userUid];
+  return userData?.mutedChannels?.includes(channelName) || false;
 }; 
