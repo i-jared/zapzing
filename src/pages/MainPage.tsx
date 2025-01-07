@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import Sidebar from '../components/Sidebar';
+import Sidebar from '../components/Sidebar'; 
 import { FaPaperPlane, FaUser, FaBuilding, FaUserCircle, FaCamera, FaChevronDown, FaChevronRight } from 'react-icons/fa';
-import { signOut, updateProfile } from 'firebase/auth';
+import { signOut, updateProfile, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendEmailVerification } from 'firebase/auth';
 import { auth, db, storage } from '../firebase';
 import { 
   collection, 
@@ -18,7 +18,8 @@ import {
   getDoc,
   setDoc,
   getDocs,
-  writeBatch
+  writeBatch,
+  limit
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
@@ -46,6 +47,15 @@ interface ChannelMember {
   uid: string;
   email: string;
   isCurrentUser: boolean;
+  displayName?: string | null;
+  photoURL?: string | null;
+}
+
+interface UserActivity {
+  lastActive: Date;
+  isTyping: boolean;
+  typingIn: string | null;
+  displayName: string | null;
 }
 
 const MainPage: React.FC = () => {
@@ -69,6 +79,18 @@ const MainPage: React.FC = () => {
   const [profileError, setProfileError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [usersCache, setUsersCache] = useState<Record<string, UserData>>({});
+  const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [accountError, setAccountError] = useState('');
+  const [accountSuccess, setAccountSuccess] = useState('');
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<{[key: string]: {displayName: string | null, email: string}}>({});
+  const typingTimeoutRef = useRef<NodeJS.Timeout>();
+
+  const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
   useEffect(() => {
     if (!workspaceId) {
@@ -122,16 +144,31 @@ const MainPage: React.FC = () => {
 
     // Fetch channel members
     const workspaceRef = doc(db, 'workspaces', workspaceId);
-    const unsubscribe = onSnapshot(workspaceRef, (doc) => {
+    const unsubscribe = onSnapshot(workspaceRef, async (doc) => {
       if (doc.exists()) {
         const workspaceData = doc.data();
         const allMembers = workspaceData.members || [];
-        // Convert member emails to ChannelMember objects
-        const members: ChannelMember[] = allMembers.map((email: string) => ({
-          uid: email, // Using email as uid for now
-          email: email,
-          isCurrentUser: email === auth.currentUser?.email
-        }));
+        
+        // Fetch user data for each member
+        const memberPromises = allMembers.map(async (email: string) => {
+          const usersQuery = query(
+            collection(db, 'users'),
+            where('email', '==', email),
+            limit(1)
+          );
+          const userSnapshot = await getDocs(usersQuery);
+          const userData = userSnapshot.docs[0]?.data();
+          
+          return {
+            uid: email,
+            email: email,
+            isCurrentUser: email === auth.currentUser?.email,
+            displayName: userData?.displayName || null,
+            photoURL: userData?.photoURL || null
+          };
+        });
+
+        const members = await Promise.all(memberPromises);
         setChannelMembers(members);
       }
     });
@@ -162,6 +199,121 @@ const MainPage: React.FC = () => {
     });
   }, [messages]);
 
+  // Add effect to track user activity
+  useEffect(() => {
+    if (!auth.currentUser) return;
+
+    const userActivityRef = doc(db, 'userActivity', auth.currentUser.uid);
+    
+    // Update last active timestamp
+    const updateLastActive = async () => {
+      await setDoc(userActivityRef, {
+        lastActive: serverTimestamp(),
+        email: auth.currentUser?.email,
+        displayName: auth.currentUser?.displayName
+      }, { merge: true });
+    };
+
+    // Update initially
+    updateLastActive();
+
+    // Update every 5 minutes if the window is active
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        updateLastActive();
+      }
+    }, 5 * 60 * 1000);
+
+    // Update on visibility change
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        updateLastActive();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  // Add effect to listen for typing users
+  useEffect(() => {
+    if (!workspaceId || !selectedChannel) return;
+
+    const typingRef = collection(db, 'typing');
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    
+    const q = query(
+      typingRef,
+      where('workspaceId', '==', workspaceId),
+      where('channel', '==', selectedChannel),
+      where('timestamp', '>', tenMinutesAgo)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const typingData: {[key: string]: {displayName: string | null, email: string}} = {};
+      
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (doc.id !== auth.currentUser?.uid && data.isTyping) {
+          typingData[doc.id] = {
+            displayName: data.displayName,
+            email: data.email
+          };
+        }
+      });
+      
+      setTypingUsers(typingData);
+    });
+
+    return () => unsubscribe();
+  }, [workspaceId, selectedChannel]);
+
+  // Add function to handle typing status
+  const handleTypingStatus = useCallback(async () => {
+    if (!auth.currentUser || !workspaceId || !selectedChannel) return;
+
+    const typingRef = doc(db, 'typing', auth.currentUser.uid);
+
+    // Clear any existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Set typing status
+    await setDoc(typingRef, {
+      isTyping: true,
+      channel: selectedChannel,
+      workspaceId,
+      timestamp: serverTimestamp(),
+      displayName: auth.currentUser.displayName,
+      email: auth.currentUser.email
+    });
+
+    // Set timeout to clear typing status after 5 seconds
+    typingTimeoutRef.current = setTimeout(async () => {
+      if (!auth.currentUser) return;
+      
+      await setDoc(typingRef, {
+        isTyping: false,
+        channel: selectedChannel,
+        workspaceId,
+        timestamp: serverTimestamp(),
+        displayName: auth.currentUser?.displayName || null,
+        email: auth.currentUser?.email || null
+      });
+    }, 5000);
+  }, [workspaceId, selectedChannel]);
+
+  // Update message input handler
+  const handleMessageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setMessage(e.target.value);
+    handleTypingStatus();
+  };
+
   const handleSignOut = async () => {
     try {
       await signOut(auth);
@@ -173,7 +325,7 @@ const MainPage: React.FC = () => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || !auth.currentUser || !workspaceId) return;
+    if (!message.trim() || !auth.currentUser || !workspaceId || !isEmailVerified) return;
 
     try {
       const messagesRef = collection(db, 'messages');
@@ -211,7 +363,7 @@ const MainPage: React.FC = () => {
 
   const handleInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail.trim() || !workspaceId || !auth.currentUser) return;
+    if (!inviteEmail.trim() || !workspaceId || !auth.currentUser || !isEmailVerified) return;
 
     setIsInviting(true);
     setInviteError('');
@@ -385,13 +537,20 @@ const MainPage: React.FC = () => {
             <button 
               className="btn btn-ghost btn-circle"
               onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
+              disabled={!isEmailVerified}
+              title={!isEmailVerified ? "Please verify your email to access workspace settings" : ""}
             >
               <FaBuilding className="w-5 h-5" />
             </button>
             <div className="dropdown dropdown-end">
-              <label tabIndex={0} className="btn btn-ghost btn-circle">
-                <FaUserCircle className="w-6 h-6" />
-              </label>
+              <div className="indicator">
+                <label tabIndex={0} className="btn btn-ghost btn-circle relative">
+                  <FaUserCircle className="w-6 h-6" />
+                  {!isEmailVerified && (
+                    <span className="absolute -top-1 -right-1 badge badge-error badge-xs w-3 h-3 p-0"></span>
+                  )}
+                </label>
+              </div>
               <ul tabIndex={0} className="mt-3 z-[1] p-2 shadow menu menu-sm dropdown-content bg-base-200 rounded-box w-52">
                 <li>
                   <a onClick={() => {
@@ -399,7 +558,20 @@ const MainPage: React.FC = () => {
                     if (modal) modal.showModal();
                   }}>Profile</a>
                 </li>
-                <li><a>Account Settings</a></li>
+                <li>
+                  <a onClick={() => {
+                    if (auth.currentUser?.email) {
+                      setNewEmail(auth.currentUser.email);
+                    }
+                    const modal = document.getElementById('account-modal') as HTMLDialogElement;
+                    if (modal) modal.showModal();
+                  }} className="relative">
+                    Account
+                    {!isEmailVerified && (
+                      <span className="badge badge-error badge-sm">!</span>
+                    )}
+                  </a>
+                </li>
                 <li><a onClick={handleSignOut} className="text-error">Sign out</a></li>
               </ul>
             </div>
@@ -437,7 +609,7 @@ const MainPage: React.FC = () => {
                                 </div>
                               ) : (
                                 <div className="placeholder">
-                                  <div className="bg-neutral text-neutral-content rounded-full w-10">
+                                  <div className="bg-neutral text-neutral-content rounded-full w-10 h-10 flex items-center justify-center">
                                     <FaUser className="w-6 h-6" />
                                   </div>
                                 </div>
@@ -466,18 +638,34 @@ const MainPage: React.FC = () => {
 
             {/* Message Input */}
             <div className="bg-base-300 p-4 w-full">
-              <form onSubmit={handleSendMessage} className="join w-full">
-                <button type="submit" className="btn btn-primary join-item">
-                  <FaPaperPlane />
-                </button>
-                <input
-                  type="text"
-                  placeholder={`Message ${isDirectMessage(selectedChannel) ? '@' : '#'}${selectedChannel}`}
-                  className="input input-bordered join-item flex-1 focus:outline-none"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                />
-              </form>
+              {!isEmailVerified ? (
+                <div className="alert alert-warning mb-4">
+                  <span>Please verify your email to send messages.</span>
+                </div>
+              ) : (
+                <>
+                  {Object.keys(typingUsers).length > 0 && (
+                    <div className="text-sm opacity-70 mb-2">
+                      {Object.values(typingUsers)
+                        .map(user => user.displayName || user.email)
+                        .join(', ')}{' '}
+                      {Object.keys(typingUsers).length === 1 ? 'is' : 'are'} typing...
+                    </div>
+                  )}
+                  <form onSubmit={handleSendMessage} className="join w-full">
+                    <button type="submit" className="btn btn-primary join-item">
+                      <FaPaperPlane />
+                    </button>
+                    <input
+                      type="text"
+                      placeholder={`Message ${isDirectMessage(selectedChannel) ? '@' : '#'}${selectedChannel}`}
+                      className="input input-bordered join-item flex-1 focus:outline-none"
+                      value={message}
+                      onChange={handleMessageChange}
+                    />
+                  </form>
+                </>
+              )}
             </div>
           </div>
 
@@ -486,16 +674,22 @@ const MainPage: React.FC = () => {
             <div className="w-80 bg-base-300 flex flex-col h-full border-l border-base-content/10">
               {/* Add User Widget */}
               <div className="p-4 border-b border-base-content/10">
-                <button 
-                  className="btn btn-primary w-full"
-                  onClick={() => {
-                    const modal = document.getElementById('invite-modal') as HTMLDialogElement;
-                    if (modal) modal.showModal();
-                  }}
-                >
-                  <FaUser className="w-4 h-4 mr-2" />
-                  Add User
-                </button>
+                {!isEmailVerified ? (
+                  <div className="alert alert-warning">
+                    <span>Please verify your email to invite users.</span>
+                  </div>
+                ) : (
+                  <button 
+                    className="btn btn-primary w-full"
+                    onClick={() => {
+                      const modal = document.getElementById('invite-modal') as HTMLDialogElement;
+                      if (modal) modal.showModal();
+                    }}
+                  >
+                    <FaUser className="w-4 h-4 mr-2" />
+                    Add User
+                  </button>
+                )}
               </div>
 
               {/* Main Content Area */}
@@ -510,14 +704,25 @@ const MainPage: React.FC = () => {
                       channelMembers.map((member) => (
                         <div key={member.uid} className="flex items-center gap-2">
                           <div className="avatar placeholder">
-                            <div className="bg-neutral text-neutral-content rounded-full w-8">
-                              <FaUser className="w-4 h-4" />
-                            </div>
+                            {member.photoURL ? (
+                              <div className="w-8 h-8 rounded-full">
+                                <img src={member.photoURL} alt="Profile" />
+                              </div>
+                            ) : (
+                              <div className="bg-neutral text-neutral-content rounded-full w-8 h-8 flex items-center justify-center">
+                                <FaUser className="w-4 h-4" />
+                              </div>
+                            )}
                           </div>
-                          <span>
-                            {member.email}
-                            {member.isCurrentUser && " (you)"}
-                          </span>
+                          <div className="flex flex-col">
+                            <span className="font-medium">
+                              {member.displayName || member.email}
+                              {member.isCurrentUser && " (you)"}
+                            </span>
+                            {member.displayName && (
+                              <span className="text-xs opacity-70">{member.email}</span>
+                            )}
+                          </div>
                         </div>
                       ))
                     )}
@@ -541,7 +746,7 @@ const MainPage: React.FC = () => {
                         invitedUsers.map((email, index) => (
                           <div key={index} className="flex items-center gap-2">
                             <div className="avatar placeholder">
-                              <div className="bg-neutral text-neutral-content rounded-full w-8">
+                              <div className="bg-neutral text-neutral-content rounded-full w-8 h-8 flex items-center justify-center">
                                 <FaUser className="w-4 h-4" />
                               </div>
                             </div>
@@ -629,7 +834,7 @@ const MainPage: React.FC = () => {
               <div className="form-control mb-4">
                 <div className="flex flex-col items-center mb-4">
                   <div className="avatar placeholder cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                    <div className="bg-neutral text-neutral-content rounded-full w-24 relative">
+                    <div className="bg-neutral text-neutral-content rounded-full w-24 h-24 relative flex items-center justify-center">
                       {profilePicture ? (
                         <img
                           src={URL.createObjectURL(profilePicture)}
@@ -702,6 +907,191 @@ const MainPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+          <form method="dialog" className="modal-backdrop">
+            <button>close</button>
+          </form>
+        </dialog>
+
+        {/* Account Settings Modal */}
+        <dialog id="account-modal" className="modal">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg mb-4">Account Settings</h3>
+            
+            {/* Email Change Section */}
+            <div className="form-control mb-6">
+              <h4 className="font-semibold mb-2">Email Settings</h4>
+              {auth.currentUser?.emailVerified ? (
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!auth.currentUser || !currentPassword) return;
+
+                  setIsUpdatingEmail(true);
+                  setAccountError('');
+                  setAccountSuccess('');
+
+                  try {
+                    // Re-authenticate user
+                    const credential = EmailAuthProvider.credential(
+                      auth.currentUser.email!,
+                      currentPassword
+                    );
+                    await reauthenticateWithCredential(auth.currentUser, credential);
+                    
+                    // Update email
+                    await updateEmail(auth.currentUser, newEmail);
+                    
+                    setAccountSuccess('Email updated successfully');
+                    setCurrentPassword('');
+                  } catch (error: any) {
+                    console.error('Error updating email:', error);
+                    setAccountError(error.message || 'Failed to update email');
+                  } finally {
+                    setIsUpdatingEmail(false);
+                  }
+                }}>
+                  <input
+                    type="email"
+                    placeholder="New Email"
+                    className="input input-bordered w-full mb-2"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    required
+                  />
+                  <input
+                    type="password"
+                    placeholder="Current Password"
+                    className="input input-bordered w-full mb-2"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    required
+                  />
+                  <button 
+                    type="submit" 
+                    className={`btn btn-primary w-full ${isUpdatingEmail ? 'loading' : ''}`}
+                    disabled={isUpdatingEmail || !newEmail.trim() || !currentPassword.trim()}
+                  >
+                    Update Email
+                  </button>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <div className="alert alert-warning">
+                    <span>Your email ({auth.currentUser?.email}) is not verified. Please verify your email before making changes.</span>
+                  </div>
+                  <button 
+                    className={`btn btn-primary w-full ${isResendingVerification ? 'loading' : ''}`}
+                    onClick={async () => {
+                      if (!auth.currentUser) return;
+                      
+                      setIsResendingVerification(true);
+                      setAccountError('');
+                      setAccountSuccess('');
+                      
+                      try {
+                        await sendEmailVerification(auth.currentUser);
+                        setAccountSuccess('Verification email sent! Please check your inbox.');
+                      } catch (error: any) {
+                        console.error('Error sending verification email:', error);
+                        setAccountError(error.message || 'Failed to send verification email');
+                      } finally {
+                        setIsResendingVerification(false);
+                      }
+                    }}
+                    disabled={isResendingVerification}
+                  >
+                    {isResendingVerification ? 'Sending...' : 'Resend Verification Email'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Password Change Section */}
+            <div className="form-control mb-6">
+              <h4 className="font-semibold mb-2">Change Password</h4>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                if (!auth.currentUser || !currentPassword) return;
+
+                setIsUpdatingPassword(true);
+                setAccountError('');
+                setAccountSuccess('');
+
+                try {
+                  // Re-authenticate user
+                  const credential = EmailAuthProvider.credential(
+                    auth.currentUser.email!,
+                    currentPassword
+                  );
+                  await reauthenticateWithCredential(auth.currentUser, credential);
+                  
+                  // Update password
+                  await updatePassword(auth.currentUser, newPassword);
+                  
+                  setAccountSuccess('Password updated successfully');
+                  setCurrentPassword('');
+                  setNewPassword('');
+                } catch (error: any) {
+                  console.error('Error updating password:', error);
+                  setAccountError(error.message || 'Failed to update password');
+                } finally {
+                  setIsUpdatingPassword(false);
+                }
+              }}>
+                <input
+                  type="password"
+                  placeholder="Current Password"
+                  className="input input-bordered w-full mb-2"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
+                />
+                <input
+                  type="password"
+                  placeholder="New Password"
+                  className="input input-bordered w-full mb-2"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  minLength={6}
+                />
+                <button 
+                  type="submit" 
+                  className={`btn btn-primary w-full ${isUpdatingPassword ? 'loading' : ''}`}
+                  disabled={isUpdatingPassword || !newPassword.trim() || !currentPassword.trim()}
+                >
+                  Update Password
+                </button>
+              </form>
+            </div>
+
+            {accountError && (
+              <div className="alert alert-error mb-4">
+                <span>{accountError}</span>
+              </div>
+            )}
+            
+            {accountSuccess && (
+              <div className="alert alert-success mb-4">
+                <span>{accountSuccess}</span>
+              </div>
+            )}
+
+            <div className="modal-action">
+              <button 
+                className="btn" 
+                onClick={() => {
+                  const modal = document.getElementById('account-modal') as HTMLDialogElement;
+                  if (modal) modal.close();
+                  setCurrentPassword('');
+                  setNewPassword('');
+                  setAccountError('');
+                  setAccountSuccess('');
+                }}
+              >
+                Close
+              </button>
+            </div>
           </div>
           <form method="dialog" className="modal-backdrop">
             <button>close</button>

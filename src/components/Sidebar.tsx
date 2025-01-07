@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { FaSearch, FaCircle, FaEllipsisV, FaPlus } from 'react-icons/fa';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDocs, limit } from 'firebase/firestore';
 import { db } from '../firebase';
+import { auth } from '../firebase';
 
 interface Channel {
     id: string;
@@ -10,13 +11,12 @@ interface Channel {
     createdAt: Date;
 }
 
-// Dummy data for users until we implement user management
-const users = [
-    { name: 'Alice', status: 'online' },
-    { name: 'Bob', status: 'offline' },
-    { name: 'Charlie', status: 'online' },
-    { name: 'David', status: 'offline' },
-];
+interface WorkspaceMember {
+    email: string;
+    displayName?: string | null;
+    photoURL?: string | null;
+    isActive?: boolean;
+}
 
 interface SidebarProps {
     onChannelSelect: (channel: string) => void;
@@ -30,6 +30,45 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
     const [loading, setLoading] = useState(true);
     const [newChannelName, setNewChannelName] = useState('');
     const [isCreating, setIsCreating] = useState(false);
+    const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
+    const isEmailVerified = auth.currentUser?.emailVerified ?? false;
+    const [activeUsers, setActiveUsers] = useState<Set<string>>(new Set());
+
+    useEffect(() => {
+        if (!workspaceId) return;
+
+        // Subscribe to workspace members
+        const workspaceRef = doc(db, 'workspaces', workspaceId);
+        const unsubscribe = onSnapshot(workspaceRef, async (workspaceDoc) => {
+            if (!workspaceDoc.exists()) return;
+
+            const memberEmails = workspaceDoc.data().members || [];
+            const memberPromises = memberEmails.map(async (email: string) => {
+                // Get user document from users collection
+                const usersQuery = query(
+                    collection(db, 'users'),
+                    where('email', '==', email),
+                    limit(1)
+                );
+                const userSnapshot = await getDocs(usersQuery);
+                
+                if (!userSnapshot.empty) {
+                    const userData = userSnapshot.docs[0].data();
+                    return {
+                        email,
+                        displayName: userData.displayName,
+                        photoURL: userData.photoURL
+                    };
+                }
+                return { email };
+            });
+
+            const members = await Promise.all(memberPromises);
+            setWorkspaceMembers(members);
+        });
+
+        return () => unsubscribe();
+    }, [workspaceId]);
 
     useEffect(() => {
         if (!workspaceId) return;
@@ -55,6 +94,27 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
             console.error("Error fetching channels:", error);
             setLoading(false);
         });
+
+        return () => unsubscribe();
+    }, [workspaceId]);
+
+    // Add effect to track active users
+    useEffect(() => {
+        if (!workspaceId) return;
+
+        const userActivityRef = collection(db, 'userActivity');
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+        
+        const unsubscribe = onSnapshot(
+            query(userActivityRef, where('lastActive', '>', tenMinutesAgo)),
+            (snapshot) => {
+                const activeUserIds = new Set<string>();
+                snapshot.docs.forEach(doc => {
+                    activeUserIds.add(doc.id);
+                });
+                setActiveUsers(activeUserIds);
+            }
+        );
 
         return () => unsubscribe();
     }, [workspaceId]);
@@ -85,8 +145,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
         channel.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const filteredUsers = users.filter(user =>
-        user.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const filteredMembers = workspaceMembers.filter(member =>
+        (member.displayName?.toLowerCase() || member.email.toLowerCase())
+        .includes(searchTerm.toLowerCase())
     );
 
     return (
@@ -130,30 +191,49 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                     ))}
                     
                     <div className="px-0 py-1">
-                        <button 
-                            onClick={() => {
-                                const modal = document.getElementById('create-channel-modal') as HTMLDialogElement;
-                                if (modal) modal.showModal();
-                            }}
-                            className="btn btn-ghost btn-sm justify-start w-full text-base-content/70 hover:text-base-content"
-                        >
-                            <FaPlus className="w-3 h-3" />
-                            <span className="ml-1">Add Channel</span>
-                        </button>
+                        {!isEmailVerified ? (
+                            <div className="alert alert-warning text-sm">
+                                <span>Please verify your email to create channels.</span>
+                            </div>
+                        ) : (
+                            <button 
+                                onClick={() => {
+                                    const modal = document.getElementById('create-channel-modal') as HTMLDialogElement;
+                                    if (modal) modal.showModal();
+                                }}
+                                className="btn btn-ghost btn-sm justify-start w-full text-base-content/70 hover:text-base-content"
+                            >
+                                <FaPlus className="w-3 h-3" />
+                                <span className="ml-1">Add Channel</span>
+                            </button>
+                        )}
                     </div>
 
                     <div className="menu-title mt-4">Direct Messages</div>
-                    {filteredUsers.map(user => (
-                        <div key={user.name} className="flex items-center px-0 py-1">
-                            <button
-                                onClick={() => onChannelSelect(user.name)}
-                                className={`hover:bg-base-300 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left ${selectedChannel === user.name ? 'bg-base-300' : ''}`}
-                            >
-                                <div className="flex justify-between">
-                                    @ {user.name}
-                                    <div className="flex items-center">
-                                        <FaCircle className={`text-xs ${user.status === 'online' ? 'text-success' : 'text-base-content text-opacity-20'}`} />
-                                        <div className="ml-1 dropdown dropdown-end">
+                    {filteredMembers.map(member => (
+                        member.email !== auth.currentUser?.email && (
+                            <div key={member.email} className="flex items-center px-0 py-1">
+                                <button
+                                    onClick={() => onChannelSelect(member.email)}
+                                    className={`hover:bg-base-300 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left ${selectedChannel === member.email ? 'bg-base-300' : ''}`}
+                                >
+                                    <div className="flex justify-between items-center">
+                                        <div className="flex items-center gap-2">
+                                            <div className="avatar placeholder indicator">
+                                                {member.photoURL ? (
+                                                    <div className="w-6 h-6 rounded-full">
+                                                        <img src={member.photoURL} alt="Profile" />
+                                                    </div>
+                                                ) : (
+                                                    <div className="bg-neutral text-neutral-content rounded-full w-6">
+                                                        <span className="text-xs">{member.displayName?.[0] || member.email[0].toUpperCase()}</span>
+                                                    </div>
+                                                )}
+                                                <span className={`indicator-item badge badge-xs ${activeUsers.has(member.email) ? 'badge-success' : 'badge-neutral opacity-40'}`}></span>
+                                            </div>
+                                            <span>{member.displayName || member.email}</span>
+                                        </div>
+                                        <div className="dropdown dropdown-end">
                                             <label tabIndex={0} className="btn btn-ghost btn-xs !h-6 !min-h-0 !w-6 px-0">
                                                 <FaEllipsisV className="w-3 h-3" />
                                             </label>
@@ -164,9 +244,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                                             </ul>
                                         </div>
                                     </div>
-                                </div>
-                            </button>
-                        </div>
+                                </button>
+                            </div>
+                        )
                     ))}
                 </div>
             </div>
