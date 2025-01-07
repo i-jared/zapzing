@@ -1,8 +1,8 @@
 import { FaFileImage, FaFilePdf, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileAlt } from 'react-icons/fa';
 import { IconType } from 'react-icons';
-import { doc, getDoc, updateDoc, arrayRemove, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayRemove, arrayUnion, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
-import { UserData } from '../types/chat';
+import { UserData, Message } from '../types/chat';
 
 export const formatTime = (date: Date): string => {
   return date.toLocaleTimeString('en-US', { 
@@ -92,4 +92,43 @@ export const isDMMuted = (userUid: string, dmEmail: string, usersCache: Record<s
 export const isChannelMuted = (userUid: string, channelName: string, usersCache: Record<string, UserData>): boolean => {
   const userData = usersCache[userUid];
   return userData?.mutedChannels?.includes(channelName) || false;
+};
+
+export const updateLastSeen = async (userUid: string, channelOrDM: string, messageId: string): Promise<void> => {
+  const userRef = doc(db, 'users', userUid);
+  
+  await updateDoc(userRef, {
+    [`lastSeen.${channelOrDM}`]: {
+      timestamp: serverTimestamp(),
+      messageId
+    }
+  });
+};
+
+export const hasUnseenMessages = (
+  channelOrDM: string, 
+  messages: Message[], 
+  userData: UserData | null
+): boolean => {
+  if (!userData || !messages.length) return false;
+
+  const lastSeen = userData.lastSeen?.[channelOrDM];
+  if (!lastSeen || !lastSeen.timestamp) return messages.some(msg => msg.channel === channelOrDM);
+
+  // Convert Firestore timestamp to Date if needed
+  let lastSeenDate: Date;
+  if (lastSeen.timestamp instanceof Date) {
+    lastSeenDate = lastSeen.timestamp;
+  } else if (lastSeen.timestamp.seconds) {
+    lastSeenDate = new Date(lastSeen.timestamp.seconds * 1000);
+  } else {
+    // If timestamp is null (which can happen with serverTimestamp()), treat as unseen
+    return messages.some(msg => msg.channel === channelOrDM);
+  }
+  
+  // Check if there are any messages newer than the last seen timestamp
+  return messages.some(msg => 
+    msg.channel === channelOrDM && 
+    msg.timestamp > lastSeenDate
+  );
 }; 

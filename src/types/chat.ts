@@ -37,6 +37,12 @@ export interface UserData {
   photoURL: string | null;
   mutedDMs?: string[]; // Array of email addresses of muted DMs
   mutedChannels?: string[]; // Array of channel names that are muted
+  lastSeen?: {
+    [channelOrDM: string]: {
+      timestamp: { seconds: number; nanoseconds: number } | Date;
+      messageId: string;
+    };
+  };
 }
 
 export interface ChannelMember {

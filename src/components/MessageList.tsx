@@ -70,7 +70,13 @@ const MessageList: React.FC<MessageListProps> = ({
     hideReplyButton
 }) => {
     return (
-        <div className="p-4">
+        <div className="p-4 min-h-full flex flex-col-reverse overflow-y-auto" style={{
+            backgroundImage: `url("/assets/${window.matchMedia('(prefers-color-scheme: dark)').matches ? 'pattern_dark' : 'pattern_light'}.png")`,
+            backgroundRepeat: 'repeat',
+            backgroundSize: '200px 200px',
+            backgroundPosition: 'center',
+            backgroundAttachment: 'fixed',
+        }}>
             {loading ? (
                 <div className="flex items-center justify-center py-8">
                     <span className="loading loading-spinner loading-lg"></span>
@@ -83,14 +89,7 @@ const MessageList: React.FC<MessageListProps> = ({
                     </div>
                 </div>
             ) : (
-                <div className="flex flex-col space-y-2" style={{
-                    backgroundImage: `url("/assets/${window.matchMedia('(prefers-color-scheme: dark)').matches ? 'pattern_dark' : 'pattern_light'}.png")`,
-                    backgroundRepeat: 'repeat',
-                    backgroundSize: '200px 200px',
-                    backgroundPosition: 'center',
-                    backgroundAttachment: 'fixed',
-                    borderRadius: '0.5rem'
-                }}>
+                <div className="flex flex-col space-y-2">
                     {messages.map((msg, index, filteredMessages) => (
                         <div
                             key={msg.id}

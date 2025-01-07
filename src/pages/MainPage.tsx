@@ -30,7 +30,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Message, UserData, ChannelMember } from '../types/chat';
-import { formatTime, shouldShowHeader, isDirectMessage, formatFileSize, getFileIcon } from '../utils/chat';
+import { formatTime, shouldShowHeader, isDirectMessage, formatFileSize, getFileIcon, updateLastSeen } from '../utils/chat';
 import { getUserDisplayName, getUserPhotoURL, setGlobalUsersCache } from '../utils/user';
 import { handleProfileUpdate, handleEmailUpdate, handlePasswordUpdate, handleResendVerification } from '../utils/auth';
 import LinkListModal from '../components/LinkListModal';
@@ -817,9 +817,18 @@ const MainPage: React.FC = () => {
     setSearchResults([]);
   }, [setSelectedChannel, handleOpenThread]);
 
-  const handleChannelSelect = (channel: string, displayName?: string) => {
+  const handleChannelSelect = async (channel: string, displayName?: string) => {
     setSelectedChannel(channel);
     setDmDisplayName(displayName);
+
+    // Update last seen when selecting a channel
+    if (auth.currentUser) {
+        const channelMessages = messages.filter(m => m.channel === channel);
+        if (channelMessages.length > 0) {
+            const latestMessage = channelMessages[channelMessages.length - 1];
+            await updateLastSeen(auth.currentUser.uid, channel, latestMessage.id);
+        }
+    }
   };
 
   // Add effect to fetch workspace data
@@ -835,6 +844,18 @@ const MainPage: React.FC = () => {
 
     return () => unsubscribe();
   }, [workspaceId]);
+
+  // Add effect to update last seen when viewing messages
+  useEffect(() => {
+    if (!auth.currentUser || !selectedChannel || !messages.length) return;
+
+    const channelMessages = messages.filter(m => m.channel === selectedChannel);
+    if (channelMessages.length > 0) {
+      const latestMessage = channelMessages[channelMessages.length - 1];
+      updateLastSeen(auth.currentUser.uid, selectedChannel, latestMessage.id)
+        .catch(error => console.error('Error updating last seen:', error));
+    }
+  }, [selectedChannel, messages]);
 
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
@@ -1185,6 +1206,7 @@ const MainPage: React.FC = () => {
           workspaceId={workspaceId || ''} 
           selectedChannel={selectedChannel}
           usersCache={usersCache}
+          messages={messages}
         />
       </div>
     </div>

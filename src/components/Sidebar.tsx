@@ -3,8 +3,8 @@ import { FaSearch, FaCircle, FaEllipsisV, FaPlus } from 'react-icons/fa';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDocs, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { auth } from '../firebase';
-import { toggleDMMute, isDMMuted, toggleChannelMute } from '../utils/chat';
-import { UserData } from '../types/chat';
+import { toggleDMMute, isDMMuted, toggleChannelMute, hasUnseenMessages } from '../utils/chat';
+import { UserData, Message } from '../types/chat';
 
 const logoLight = '/assets/logo_light.png';
 const logoDark = '/assets/logo_dark.png';
@@ -29,9 +29,10 @@ interface SidebarProps {
     workspaceId: string;
     selectedChannel: string;
     usersCache: Record<string, UserData>;
+    messages: Message[];
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selectedChannel, usersCache }) => {
+const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selectedChannel, usersCache, messages }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [channels, setChannels] = useState<Channel[]>([]);
     const [loading, setLoading] = useState(true);
@@ -238,7 +239,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                                 <div className="flex justify-between w-full">
                                     <div className={`flex items-center gap-1 ${currentUserData?.mutedChannels?.includes(channel.name) ? 'opacity-50' : ''}`}>
                                         <span className="text-sm">#</span>
-                                        <span className="text-sm">{channel.name}</span>
+                                        <span className={`text-sm ${hasUnseenMessages(channel.name, messages, currentUserData) ? 'font-bold' : ''}`}>
+                                            {channel.name}
+                                        </span>
                                     </div>
 
                                     <div className="dropdown dropdown-end ml-4" onClick={(e) => e.stopPropagation()}>
@@ -306,7 +309,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                                                 )}
                                                 <span className={`indicator-item badge badge-xs ${activeUsers.has(member.email) ? 'badge-success' : 'badge-neutral opacity-40'}`}></span>
                                             </div>
-                                            <span>{member.displayName || member.email}</span>
+                                            <span className={hasUnseenMessages(member.email, messages, currentUserData) ? 'font-bold' : ''}>
+                                                {member.displayName || member.email}
+                                            </span>
                                         </div>
                                         <div className="dropdown dropdown-end" onClick={(e) => e.stopPropagation()}>
                                             <input type="checkbox" className="hidden peer" />
