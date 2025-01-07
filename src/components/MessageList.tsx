@@ -76,8 +76,10 @@ const MessageList: React.FC<MessageListProps> = ({
           {messages.map((msg, index, filteredMessages) => (
             <div 
               key={msg.id} 
-              className={`flex pl-4 group relative hover:bg-base-300/30 rounded-lg transition-colors ${
-                msg.id === replyingToId ? 'outline outline-2 outline-primary' : ''
+              className={`flex pl-4 group relative hover:bg-base-300/30 rounded-lg transition-all ${
+                msg.id === replyingToId ? 
+                'bg-primary/5 shadow-[0_0_0_1px_hsl(var(--p))] before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:bg-primary before:rounded-l-lg' : 
+                ''
               }`}
             >
               <div className="w-10 flex-shrink-0">
@@ -188,10 +190,17 @@ const MessageList: React.FC<MessageListProps> = ({
                   {/* Reaction Menu */}
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity items-center gap-2 absolute -top-12 right-8 bg-base-200 rounded-full p-2 shadow-lg z-[10] flex">
                     <button
-                      className="btn btn-ghost btn-sm px-2 min-h-0 h-8 flex items-center justify-center hover:bg-base-300"
-                      onClick={() => onReply?.(msg.id)}
+                      className={`btn btn-sm px-2 min-h-0 h-8 flex items-center justify-center ${
+                        msg.id === replyingToId 
+                          ? 'btn-error hover:btn-error' 
+                          : 'btn-ghost hover:bg-base-300'
+                      }`}
+                      onClick={() => msg.id === replyingToId ? onReply?.(replyingToId) : onReply?.(msg.id)}
+                      title={msg.id === replyingToId ? "Cancel reply" : "Reply"}
                     >
-                      <FaReply className="w-4 h-4" />
+                      <FaReply className={`w-4 h-4 ${
+                        msg.id === replyingToId ? 'rotate-180' : ''
+                      }`} />
                     </button>
                     <div className="w-px h-6 bg-base-content/20"></div>
                     {commonEmojis.map(emoji => (

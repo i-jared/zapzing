@@ -323,6 +323,7 @@ const MainPage: React.FC = () => {
         workspaceId
       });
       setMessage('');
+      setReplyingTo(null);
     } catch (error) {
       console.error('Error sending message:', error);
     }
@@ -529,6 +530,12 @@ const MainPage: React.FC = () => {
   };
 
   const handleReply = (messageId: string) => {
+    // If clicking on the same message that's being replied to, cancel the reply
+    if (replyingTo?.messageId === messageId) {
+      setReplyingTo(null);
+      return;
+    }
+
     const message = messages.find(m => m.id === messageId);
     if (!message) return;
 
