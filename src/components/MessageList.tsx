@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaUser, FaSmile, FaExternalLinkAlt, FaDownload, FaFileImage, FaFilePdf, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileAlt } from 'react-icons/fa';
+import { FaUser, FaSmile, FaExternalLinkAlt, FaDownload, FaFileImage, FaFilePdf, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileAlt, FaReply } from 'react-icons/fa';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
 
@@ -38,6 +38,8 @@ interface MessageListProps {
   formatFileSize: (bytes: number) => string;
   getFileIcon: (fileName: string, contentType?: string) => typeof FaFileAlt;
   commonEmojis: string[];
+  onReply?: (messageId: string) => void;
+  replyingToId?: string;
 }
 
 const MessageList: React.FC<MessageListProps> = ({
@@ -52,7 +54,9 @@ const MessageList: React.FC<MessageListProps> = ({
   formatTime,
   formatFileSize,
   getFileIcon,
-  commonEmojis
+  commonEmojis,
+  onReply,
+  replyingToId
 }) => {
   return (
     <div className="p-4">
@@ -70,7 +74,12 @@ const MessageList: React.FC<MessageListProps> = ({
       ) : (
         <div className="flex flex-col space-y-2">
           {messages.map((msg, index, filteredMessages) => (
-            <div key={msg.id} className="flex pl-4 group relative hover:bg-base-300/30 rounded-lg transition-colors">
+            <div 
+              key={msg.id} 
+              className={`flex pl-4 group relative hover:bg-base-300/30 rounded-lg transition-colors ${
+                msg.id === replyingToId ? 'outline outline-2 outline-primary' : ''
+              }`}
+            >
               <div className="w-10 flex-shrink-0">
                 {shouldShowHeader(msg, index, filteredMessages) && (
                   <div className="avatar">
@@ -178,6 +187,13 @@ const MessageList: React.FC<MessageListProps> = ({
 
                   {/* Reaction Menu */}
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity items-center gap-2 absolute -top-12 right-8 bg-base-200 rounded-full p-2 shadow-lg z-[10] flex">
+                    <button
+                      className="btn btn-ghost btn-sm px-2 min-h-0 h-8 flex items-center justify-center hover:bg-base-300"
+                      onClick={() => onReply?.(msg.id)}
+                    >
+                      <FaReply className="w-4 h-4" />
+                    </button>
+                    <div className="w-px h-6 bg-base-content/20"></div>
                     {commonEmojis.map(emoji => (
                       <button
                         key={emoji}

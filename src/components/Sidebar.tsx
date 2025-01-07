@@ -161,15 +161,22 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
         .includes(searchTerm.toLowerCase())
     );
 
+    const handleClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+    };
+
     return (
-        <div className="w-80 min-h-full bg-base-100 text-base-content shadow-2xl relative z-30 border-r border-base-300">
-            <div className="navbar bg-base-200">
+        <div 
+            className="w-80 min-h-full bg-base-100 text-base-content shadow-2xl relative z-30 border-r border-base-300"
+            onClick={handleClick}
+        >
+            <div className="navbar bg-base-200" onClick={handleClick}>
                 <div className="flex-1">
                     <div className="text-xl font-bold px-2">ZapZing</div>
                 </div>
             </div>
 
-            <div className="p-4">
+            <div className="p-4" onClick={handleClick}>
                 <div className="form-control mb-4">
                     <div className="join w-full">
                         <input
@@ -178,14 +185,15 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                             className="input input-bordered join-item w-full"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
                         />
-                        <button className="btn join-item">
+                        <button className="btn join-item" onClick={(e) => e.stopPropagation()}>
                             <FaSearch />
                         </button>
                     </div>
                 </div>
 
-                <div className="menu bg-base-200 w-full rounded-box">
+                <div className="menu bg-base-200 w-full rounded-box" onClick={(e) => e.stopPropagation()}>
                     <div className="menu-title flex justify-between items-center">
                         <span>Channels</span>
                         {loading && <span className="loading loading-spinner loading-xs"></span>}
@@ -263,7 +271,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
             </div>
 
             {/* Create Channel Modal */}
-            <dialog id="create-channel-modal" className="modal">
+            <dialog id="create-channel-modal" className="modal" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-box">
                     <h3 className="font-bold text-lg mb-4">Create a Channel</h3>
                     <form onSubmit={handleCreateChannel}>

@@ -13,6 +13,10 @@ interface MessageInputProps {
   onMessageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onSubmit: (e: React.FormEvent) => void;
   onFileClick: () => void;
+  replyTo?: {
+    senderName: string;
+    onCancel: () => void;
+  };
 }
 
 const MessageInput: React.FC<MessageInputProps> = ({
@@ -24,7 +28,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
   displayName,
   onMessageChange,
   onSubmit,
-  onFileClick
+  onFileClick,
+  replyTo
 }) => {
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && message.trim() && isEmailVerified) {
@@ -72,6 +77,21 @@ const MessageInput: React.FC<MessageInputProps> = ({
                       .join(', ')}{' '}
                     {Object.keys(typingUsers).length === 1 ? 'is' : 'are'} typing...
                   </span>
+                </div>
+              )}
+
+              {/* Reply badge */}
+              {replyTo && (
+                <div className="p-2 bg-base-300 rounded-t-lg flex items-center justify-between">
+                  <span className="text-sm opacity-70">
+                    Replying to {replyTo.senderName}
+                  </span>
+                  <button 
+                    onClick={replyTo.onCancel}
+                    className="btn btn-ghost btn-xs"
+                  >
+                    ✕
+                  </button>
                 </div>
               )}
 

@@ -57,6 +57,10 @@ const MainPage: React.FC = () => {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const lastScrollHeightRef = useRef<number>(0);
   const lastScrollTopRef = useRef<number>(0);
+  const [replyingTo, setReplyingTo] = useState<{
+    messageId: string;
+    senderName: string;
+  } | null>(null);
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
@@ -327,32 +331,32 @@ const MainPage: React.FC = () => {
   const handleInviteUser = async (email: string) => {
     if (!workspaceId || !auth.currentUser || !isEmailVerified) return;
 
-    // Validate email format
+      // Validate email format
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       throw new Error('Please enter a valid email address');
-    }
+      }
 
-    const workspaceRef = doc(db, 'workspaces', workspaceId);
-    const workspaceSnap = await getDoc(workspaceRef);
+      const workspaceRef = doc(db, 'workspaces', workspaceId);
+      const workspaceSnap = await getDoc(workspaceRef);
 
-    if (!workspaceSnap.exists()) {
+      if (!workspaceSnap.exists()) {
       throw new Error('Workspace not found');
-    }
+      }
 
-    const workspaceData = workspaceSnap.data();
-    
-    // Check if user is already a member
+      const workspaceData = workspaceSnap.data();
+      
+      // Check if user is already a member
     if (workspaceData.members.includes(email.trim())) {
       throw new Error('User is already a member of this workspace');
-    }
+      }
 
-    // Check if user is already invited
+      // Check if user is already invited
     if (workspaceData.invitedEmails?.includes(email.trim())) {
       throw new Error('User has already been invited');
-    }
+      }
 
-    // Add email to invited list
-    await updateDoc(workspaceRef, {
+      // Add email to invited list
+      await updateDoc(workspaceRef, {
       invitedEmails: arrayUnion(email.trim())
     });
   };
@@ -524,6 +528,32 @@ const MainPage: React.FC = () => {
     }
   };
 
+  const handleReply = (messageId: string) => {
+    const message = messages.find(m => m.id === messageId);
+    if (!message) return;
+
+    const senderName = getUserDisplayName(
+      message.sender.uid,
+      message.sender.email,
+      usersCache,
+      message.sender.displayName
+    );
+    
+    setReplyingTo({
+      messageId,
+      senderName
+    });
+    
+    const input = document.querySelector('input[type="text"]') as HTMLInputElement;
+    if (input) {
+      input.focus();
+    }
+  };
+
+  const handleCancelReply = () => {
+    setReplyingTo(null);
+  };
+
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
@@ -576,8 +606,8 @@ const MainPage: React.FC = () => {
                 <li>
                   <a onClick={() => {
                     if (auth.currentUser?.email) {
-                      const modal = document.getElementById('account-modal') as HTMLDialogElement;
-                      if (modal) modal.showModal();
+                    const modal = document.getElementById('account-modal') as HTMLDialogElement;
+                    if (modal) modal.showModal();
                     }
                   }} className="relative">
                     Account
@@ -615,24 +645,32 @@ const MainPage: React.FC = () => {
                 formatFileSize={formatFileSize}
                 getFileIcon={getFileIcon}
                 commonEmojis={COMMON_EMOJIS}
+                onReply={handleReply}
+                replyingToId={replyingTo?.messageId}
               />
             </div>
 
             {/* Fixed Message Input */}
-            <MessageInput 
-              message={message}
-              isEmailVerified={isEmailVerified}
-              typingUsers={typingUsers}
-              isDirectMessage={isDirectMessage(selectedChannel)}
-              channelName={selectedChannel}
-              displayName={dmUserInfo?.displayName || null}
-              onMessageChange={handleMessageChange}
-              onSubmit={handleSendMessage}
-              onFileClick={() => {
-                const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
-                if (modal) modal.showModal();
-              }}
-            />
+            <div className="absolute bottom-0 left-0 right-0 bg-base-200 p-4">
+              <MessageInput 
+                message={message}
+                isEmailVerified={isEmailVerified}
+                typingUsers={typingUsers}
+                isDirectMessage={isDirectMessage(selectedChannel)}
+                channelName={selectedChannel}
+                displayName={dmUserInfo?.displayName || null}
+                onMessageChange={handleMessageChange}
+                onSubmit={handleSendMessage}
+                onFileClick={() => {
+                  const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
+                  if (modal) modal.showModal();
+                }}
+                replyTo={replyingTo ? {
+                  senderName: replyingTo.senderName,
+                  onCancel: handleCancelReply
+                } : undefined}
+              />
+            </div>
           </div>
 
           {/* Right Sidebar */}
@@ -643,13 +681,13 @@ const MainPage: React.FC = () => {
               invitedUsers={invitedUsers}
               isInvitedUsersExpanded={isInvitedUsersExpanded}
               onInviteClick={() => {
-                const modal = document.getElementById('invite-modal') as HTMLDialogElement;
-                if (modal) modal.showModal();
-              }}
+                      const modal = document.getElementById('invite-modal') as HTMLDialogElement;
+                      if (modal) modal.showModal();
+                    }}
               onToggleInvitedUsers={() => setIsInvitedUsersExpanded(!isInvitedUsersExpanded)}
             />
           )}
-        </div>
+                </div>
 
         {/* Modals */}
         <InviteModal onInvite={handleInviteUser} />
@@ -679,7 +717,7 @@ const MainPage: React.FC = () => {
           onFileUpload={handleFileUpload}
           onClose={() => {
             const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
-            if (modal) modal.close();
+                    if (modal) modal.close();
             setSelectedFile(null);
           }}
         />
