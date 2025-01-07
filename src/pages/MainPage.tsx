@@ -127,6 +127,9 @@ const MainPage: React.FC = () => {
   const [dmUserInfo, setDmUserInfo] = useState<{displayName: string | null, email: string} | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const lastScrollHeightRef = useRef<number>(0);
+  const lastScrollTopRef = useRef<number>(0);
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
@@ -141,7 +144,7 @@ const MainPage: React.FC = () => {
     const messagesQuery = query(
       messagesRef,
       where('workspaceId', '==', workspaceId),
-      orderBy('timestamp', 'asc')
+      orderBy('timestamp', 'desc')
     );
 
     const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
@@ -682,14 +685,61 @@ const MainPage: React.FC = () => {
     }
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  // Function to preserve scroll position when content changes
+  const preserveScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
 
-  // Add effect to scroll to bottom when messages change
+    const scrollDelta = container.scrollHeight - lastScrollHeightRef.current;
+    if (scrollDelta > 0 && container.scrollTop === lastScrollTopRef.current) {
+      container.scrollTop += scrollDelta;
+    }
+    
+    lastScrollHeightRef.current = container.scrollHeight;
+    lastScrollTopRef.current = container.scrollTop;
+  }, []);
+
+  // Add effect to handle image loads
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    // Store initial scroll values
+    lastScrollHeightRef.current = container.scrollHeight;
+    lastScrollTopRef.current = container.scrollTop;
+
+    // Find all images in messages
+    const images = container.getElementsByTagName('img');
+    
+    const handleImageLoad = () => {
+      preserveScroll();
+    };
+
+    // Add load event listeners to all images
+    Array.from(images).forEach(img => {
+      if (!img.complete) {
+        img.addEventListener('load', handleImageLoad);
+      }
+    });
+
+    return () => {
+      Array.from(images).forEach(img => {
+        img.removeEventListener('load', handleImageLoad);
+      });
+    };
+  }, [messages, preserveScroll]);
+
+  // Initialize scroll position
+  useEffect(() => {
+    if (!loading) {
+      const container = messagesContainerRef.current;
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+        lastScrollHeightRef.current = container.scrollHeight;
+        lastScrollTopRef.current = container.scrollTop;
+      }
+    }
+  }, [loading]);
 
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
@@ -745,7 +795,7 @@ const MainPage: React.FC = () => {
                   )}
                 </label>
               </div>
-              <ul tabIndex={0} className="mt-3 z-[1] p-2 shadow menu menu-sm dropdown-content bg-base-200 rounded-box w-52">
+              <ul tabIndex={0} className="mt-3 z-[100] p-2 shadow menu menu-sm dropdown-content bg-base-200 rounded-box w-52">
                 <li>
                   <a onClick={() => {
                     const modal = document.getElementById('profile-modal') as HTMLDialogElement;
@@ -776,15 +826,19 @@ const MainPage: React.FC = () => {
         <div className="flex flex-1 overflow-hidden">
           {/* Messages Area with Fixed Input */}
           <div className="flex-1 relative flex flex-col">
-            {/* Scrollable Messages Container - absolute positioning to scroll under the fixed input */}
-            <div className="absolute inset-0 overflow-y-auto pb-[88px]">
+            {/* Scrollable Messages Container */}
+            <div 
+              ref={messagesContainerRef}
+              className="absolute inset-0 overflow-y-auto flex flex-col-reverse" 
+              style={{ paddingBottom: '76px' }}
+            >
               <div className="p-4">
                 {loading ? (
-                  <div className="h-full flex items-center justify-center">
+                  <div className="flex items-center justify-center py-8">
                     <span className="loading loading-spinner loading-lg"></span>
                   </div>
                 ) : messages.filter(m => m.channel === selectedChannel).length === 0 ? (
-                  <div className="h-full flex items-center justify-center">
+                  <div className="flex items-center justify-center py-8">
                     <div className="text-center opacity-50">
                       <div className="text-lg font-semibold">No messages yet</div>
                       <div className="text-sm">Send the first message to {isDirectMessage(selectedChannel) ? '@' : '#'}{selectedChannel}</div>
@@ -916,7 +970,7 @@ const MainPage: React.FC = () => {
                                   <label tabIndex={0} className="btn btn-ghost btn-sm px-2 min-h-0 h-8 flex items-center justify-center">
                                     <FaSmile className="w-5 h-5" />
                                   </label>
-                                  <div tabIndex={0} className="dropdown-content z-[1] shadow-lg">
+                                  <div tabIndex={0} className="dropdown-content z-[50] shadow-lg">
                                     <Picker 
                                       data={data} 
                                       onEmojiSelect={(emoji: any) => handleAddReaction(msg.id, emoji.native)}
@@ -959,11 +1013,11 @@ const MainPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Fixed Message Input - absolute positioning at bottom */}
+            {/* Fixed Message Input */}
             <div className="absolute bottom-0 left-0 right-0 bg-base-300 border-t border-base-content/10">
               <div className="p-4">
                 {!isEmailVerified ? (
-                  <div className="alert alert-warning mb-4">
+                  <div className="alert alert-warning">
                     <span>Please verify your email to send messages.</span>
                   </div>
                 ) : (
@@ -976,21 +1030,17 @@ const MainPage: React.FC = () => {
                         {Object.keys(typingUsers).length === 1 ? 'is' : 'are'} typing...
                       </div>
                     )}
-                    <div className="flex gap-2">
-                      <div className="join">
-                        <button type="button" className="btn btn-ghost join-item" onClick={() => {
+                    <div className="flex items-center gap-2">
+                      <button 
+                        type="button" 
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
                           const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
                           if (modal) modal.showModal();
-                        }}>
-                          <FaFile className="w-5 h-5" />
-                        </button>
-                        <button type="button" className="btn btn-ghost join-item">
-                          <FaVideo className="w-5 h-5" />
-                        </button>
-                        <button type="button" className="btn btn-ghost join-item">
-                          <FaPencilAlt className="w-5 h-5" />
-                        </button>
-                      </div>
+                        }}
+                      >
+                        <FaFile className="w-4 h-4" />
+                      </button>
                       <form onSubmit={handleSendMessage} className="join flex-1">
                         <button type="submit" className="btn btn-primary join-item">
                           <FaPaperPlane />
