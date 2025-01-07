@@ -89,6 +89,7 @@ const MainPage: React.FC = () => {
   const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [typingUsers, setTypingUsers] = useState<{[key: string]: {displayName: string | null, email: string}}>({});
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
+  const [dmUserInfo, setDmUserInfo] = useState<{displayName: string | null, email: string} | null>(null);
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
@@ -435,7 +436,8 @@ const MainPage: React.FC = () => {
   };
 
   const isDirectMessage = (channelName: string) => {
-    return ['Alice', 'Bob', 'Charlie', 'David'].includes(channelName);
+    // A channel name that contains @ is an email address, indicating a DM
+    return channelName.includes('@');
   };
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
@@ -530,6 +532,38 @@ const MainPage: React.FC = () => {
     return senderPhotoURL;
   };
 
+  // Add effect to fetch DM user info
+  useEffect(() => {
+    if (!selectedChannel || !isDirectMessage(selectedChannel)) {
+      setDmUserInfo(null);
+      return;
+    }
+
+    const fetchUserInfo = async () => {
+      const usersQuery = query(
+        collection(db, 'users'),
+        where('email', '==', selectedChannel),
+        limit(1)
+      );
+      const userSnapshot = await getDocs(usersQuery);
+      
+      if (!userSnapshot.empty) {
+        const userData = userSnapshot.docs[0].data();
+        setDmUserInfo({
+          displayName: userData.displayName,
+          email: selectedChannel
+        });
+      } else {
+        setDmUserInfo({
+          displayName: null,
+          email: selectedChannel
+        });
+      }
+    };
+
+    fetchUserInfo();
+  }, [selectedChannel]);
+
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
@@ -544,7 +578,13 @@ const MainPage: React.FC = () => {
             </label>
           </div>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold">{isDirectMessage(selectedChannel) ? '@' : '#'}{selectedChannel}</h1>
+            <h1 className="text-2xl font-bold">
+              {isDirectMessage(selectedChannel) ? (
+                <>@{dmUserInfo?.displayName || selectedChannel}</>
+              ) : (
+                <>#{selectedChannel}</>
+              )}
+            </h1>
           </div>
           <div className="flex-none gap-2">
             <button 
@@ -671,7 +711,9 @@ const MainPage: React.FC = () => {
                     </button>
                     <input
                       type="text"
-                      placeholder={`Message ${isDirectMessage(selectedChannel) ? '@' : '#'}${selectedChannel}`}
+                      placeholder={`Message ${isDirectMessage(selectedChannel) ? 
+                        `@${dmUserInfo?.displayName || selectedChannel}` : 
+                        `#${selectedChannel}`}`}
                       className="input input-bordered join-item flex-1 focus:outline-none"
                       value={message}
                       onChange={handleMessageChange}
