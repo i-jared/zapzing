@@ -705,13 +705,27 @@ const MainPage: React.FC = () => {
             </label>
           </div>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold">
-              {isDirectMessage(selectedChannel) ? (
-                <>@{dmUserInfo?.displayName || selectedChannel}</>
-              ) : (
-                <>#{selectedChannel}</>
-              )}
-            </h1>
+            <div className="flex flex-col">
+              <h1 className="text-2xl font-bold">
+                {isDirectMessage(selectedChannel) ? (
+                  <>@{dmUserInfo?.displayName || selectedChannel}</>
+                ) : (
+                  <>#{selectedChannel}</>
+                )}
+              </h1>
+              <div className="flex items-center gap-2 mt-1">
+                <button 
+                  className="btn btn-ghost btn-sm gap-2"
+                  onClick={() => {
+                    const modal = document.getElementById('files-modal') as HTMLDialogElement;
+                    if (modal) modal.showModal();
+                  }}
+                >
+                  <FaFile className="w-4 h-4" />
+                  <span className="text-sm">Files</span>
+                </button>
+              </div>
+            </div>
           </div>
           <div className="flex-none gap-2">
             <button 
@@ -1490,6 +1504,101 @@ const MainPage: React.FC = () => {
             >
               Cancel
             </button>
+          </div>
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button>close</button>
+        </form>
+      </dialog>
+
+      {/* Files Modal */}
+      <dialog id="files-modal" className="modal">
+        <div className="modal-box max-w-4xl">
+          <h3 className="font-bold text-lg mb-4">Channel Files</h3>
+          <div className="overflow-y-auto max-h-[60vh]">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {messages
+                .filter(m => m.channel === selectedChannel && m.attachment)
+                .map((msg) => (
+                  <div key={msg.id} className="card bg-base-200">
+                    <div className="card-body p-4">
+                      {msg.attachment?.contentType?.startsWith('image/') ? (
+                        // Image Preview
+                        <figure className="relative group">
+                          <img 
+                            src={msg.attachment.url} 
+                            alt={msg.attachment.name}
+                            className="rounded-lg w-full h-32 object-cover"
+                          />
+                          <div className="absolute inset-0 bg-base-300/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                            <a 
+                              href={msg.attachment.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="btn btn-sm btn-ghost"
+                              title="View full size"
+                            >
+                              <FaExternalLinkAlt />
+                            </a>
+                            <a 
+                              href={msg.attachment.url} 
+                              download={msg.attachment.name}
+                              className="btn btn-sm btn-ghost"
+                              title="Download"
+                            >
+                              <FaDownload />
+                            </a>
+                          </div>
+                        </figure>
+                      ) : (
+                        // File Preview
+                        <div className="flex items-start gap-4">
+                          <div className="text-3xl opacity-70">
+                            {React.createElement(getFileIcon(msg.attachment?.name || '', msg.attachment?.contentType))}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{msg.attachment?.name}</div>
+                            <div className="text-sm opacity-70">{formatFileSize(msg.attachment?.size || 0)}</div>
+                            <div className="mt-2 flex gap-2">
+                              <a 
+                                href={msg.attachment?.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="btn btn-sm btn-ghost"
+                                title="View"
+                              >
+                                <FaExternalLinkAlt />
+                              </a>
+                              <a 
+                                href={msg.attachment?.url} 
+                                download={msg.attachment?.name}
+                                className="btn btn-sm btn-ghost"
+                                title="Download"
+                              >
+                                <FaDownload />
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <div className="text-xs opacity-70 mt-2">
+                        Shared by {getUserDisplayName(msg.sender.uid, msg.sender.email, msg.sender.displayName)} on {msg.timestamp.toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+            {messages.filter(m => m.channel === selectedChannel && m.attachment).length === 0 && (
+              <div className="text-center py-8 opacity-50">
+                <FaFile className="w-12 h-12 mx-auto mb-2" />
+                <div>No files shared in this channel yet</div>
+              </div>
+            )}
+          </div>
+          <div className="modal-action">
+            <form method="dialog">
+              <button className="btn">Close</button>
+            </form>
           </div>
         </div>
         <form method="dialog" className="modal-backdrop">
