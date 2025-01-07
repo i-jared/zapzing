@@ -23,6 +23,12 @@ interface Message {
     size: number;
     contentType?: string;
   };
+  replyTo?: {
+    messageId: string;
+    threadId: string;
+    senderName: string;
+  };
+  replyCount?: number;
 }
 
 interface MessageListProps {
@@ -30,8 +36,8 @@ interface MessageListProps {
   loading: boolean;
   isDirectMessage: boolean;
   channelName: string;
-  getUserDisplayName: (uid: string, email: string, displayName?: string) => string;
-  getUserPhotoURL: (uid: string, photoURL?: string) => string | null;
+  getUserDisplayName: (senderId: string, senderEmail: string, senderDisplayName?: string) => string;
+  getUserPhotoURL: (senderId: string, senderPhotoURL?: string) => string | null;
   handleAddReaction: (messageId: string, emoji: string) => void;
   shouldShowHeader: (msg: Message, index: number, messages: Message[]) => boolean;
   formatTime: (date: Date) => string;
@@ -40,6 +46,8 @@ interface MessageListProps {
   commonEmojis: string[];
   onReply?: (messageId: string) => void;
   replyingToId?: string;
+  onOpenThread?: (messageId: string) => void;
+  hideReplyButton?: boolean;
 }
 
 const MessageList: React.FC<MessageListProps> = ({
@@ -56,7 +64,9 @@ const MessageList: React.FC<MessageListProps> = ({
   getFileIcon,
   commonEmojis,
   onReply,
-  replyingToId
+  replyingToId,
+  onOpenThread,
+  hideReplyButton
 }) => {
   return (
     <div className="p-4">
@@ -189,20 +199,24 @@ const MessageList: React.FC<MessageListProps> = ({
 
                   {/* Reaction Menu */}
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity items-center gap-2 absolute -top-12 right-8 bg-base-200 rounded-full p-2 shadow-lg z-[10] flex">
-                    <button
-                      className={`btn btn-sm px-2 min-h-0 h-8 flex items-center justify-center ${
-                        msg.id === replyingToId 
-                          ? 'btn-error hover:btn-error' 
-                          : 'btn-ghost hover:bg-base-300'
-                      }`}
-                      onClick={() => msg.id === replyingToId ? onReply?.(replyingToId) : onReply?.(msg.id)}
-                      title={msg.id === replyingToId ? "Cancel reply" : "Reply"}
-                    >
-                      <FaReply className={`w-4 h-4 ${
-                        msg.id === replyingToId ? 'rotate-180' : ''
-                      }`} />
-                    </button>
-                    <div className="w-px h-6 bg-base-content/20"></div>
+                    {!hideReplyButton && (
+                      <>
+                        <button
+                          className={`btn btn-sm px-2 min-h-0 h-8 flex items-center justify-center ${
+                            msg.id === replyingToId 
+                              ? 'btn-error hover:btn-error' 
+                              : 'btn-ghost hover:bg-base-300'
+                          }`}
+                          onClick={() => msg.id === replyingToId ? onReply?.(replyingToId) : onReply?.(msg.id)}
+                          title={msg.id === replyingToId ? "Cancel reply" : "Reply"}
+                        >
+                          <FaReply className={`w-4 h-4 ${
+                            msg.id === replyingToId ? 'rotate-180' : ''
+                          }`} />
+                        </button>
+                        <div className="w-px h-6 bg-base-content/20"></div>
+                      </>
+                    )}
                     {commonEmojis.map(emoji => (
                       <button
                         key={emoji}
@@ -247,6 +261,18 @@ const MessageList: React.FC<MessageListProps> = ({
                           <span className="text-xs leading-none">{reaction.users.length}</span>
                         </button>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Add reply count at the bottom */}
+                  {(msg.replyCount ?? 0) > 0 && (
+                    <div className="mt-1 ml-14">
+                      <button
+                        onClick={() => onOpenThread?.(msg.id)}
+                        className="btn btn-ghost btn-xs text-primary hover:text-primary-focus"
+                      >
+                        {msg.replyCount} {msg.replyCount === 1 ? 'reply' : 'replies'}
+                      </button>
                     </div>
                   )}
                 </div>

@@ -15,7 +15,7 @@ export interface Message {
   timestamp: Date;
   channel: string;
   workspaceId: string;
-  reactions?: { [key: string]: Reaction };  // emoji as key
+  reactions?: { [key: string]: { emoji: string; users: string[] } };
   attachment?: {
     type: 'file' | 'video' | 'drawing';
     url: string;
@@ -23,6 +23,12 @@ export interface Message {
     size: number;
     contentType?: string;
   };
+  replyTo?: {
+    messageId: string;
+    threadId: string;
+    senderName: string;
+  };
+  replyCount?: number;
 }
 
 export interface UserData {

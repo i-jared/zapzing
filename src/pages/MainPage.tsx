@@ -61,6 +61,11 @@ const MainPage: React.FC = () => {
     messageId: string;
     senderName: string;
   } | null>(null);
+  const [selectedThread, setSelectedThread] = useState<{
+    messageId: string;
+    replies: Message[];
+  } | null>(null);
+  const [threadMessage, setThreadMessage] = useState('');
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
@@ -79,16 +84,24 @@ const MainPage: React.FC = () => {
     );
 
     const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-      const messagesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        text: doc.data().text,
-        sender: doc.data().sender,
-        timestamp: doc.data().timestamp?.toDate() || new Date(),
-        channel: doc.data().channel,
-        workspaceId: doc.data().workspaceId,
-        reactions: doc.data().reactions || {},
-        attachment: doc.data().attachment || null
-      }));
+      const messagesData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          text: data.text,
+          sender: data.sender,
+          timestamp: data.timestamp?.toDate() || new Date(),
+          channel: data.channel,
+          workspaceId: data.workspaceId,
+          reactions: data.reactions || {},
+          attachment: data.attachment || null,
+          replyTo: data.replyTo || null,
+          // Count replies for this message
+          replyCount: snapshot.docs.filter(m => 
+            m.data().replyTo?.messageId === doc.id
+          ).length
+        };
+      });
       setMessages(messagesData);
       setLoading(false);
     }, (error) => {
@@ -310,7 +323,7 @@ const MainPage: React.FC = () => {
 
     try {
       const messagesRef = collection(db, 'messages');
-      await addDoc(messagesRef, {
+      const messageData = {
         text: message.trim(),
         sender: {
           uid: auth.currentUser.uid,
@@ -320,8 +333,41 @@ const MainPage: React.FC = () => {
         },
         timestamp: serverTimestamp(),
         channel: selectedChannel,
-        workspaceId
-      });
+        workspaceId,
+        // Add reply metadata if replying to a message
+        ...(replyingTo ? {
+          replyTo: {
+            messageId: replyingTo.messageId,
+            threadId: replyingTo.messageId, // Use original message as thread ID
+            senderName: replyingTo.senderName
+          }
+        } : {})
+      };
+
+      const docRef = await addDoc(messagesRef, messageData);
+      
+      // Create a new message object with the sent data
+      const newMessage: Message = {
+        id: docRef.id,
+        text: messageData.text,
+        sender: {
+          uid: auth.currentUser.uid,
+          email: auth.currentUser.email || '',
+          displayName: auth.currentUser.displayName || undefined,
+          photoURL: auth.currentUser.photoURL || undefined
+        },
+        timestamp: new Date(), // Use current time for immediate display
+        channel: messageData.channel,
+        workspaceId: messageData.workspaceId,
+        replyTo: messageData.replyTo
+      };
+
+      // Update the thread's replies immediately
+      setSelectedThread(current => current ? {
+        ...current,
+        replies: [...current.replies, newMessage]
+      } : null);
+
       setMessage('');
       setReplyingTo(null);
     } catch (error) {
@@ -539,6 +585,12 @@ const MainPage: React.FC = () => {
     const message = messages.find(m => m.id === messageId);
     if (!message) return;
 
+    // If message has replies, open the thread view
+    if ((message.replyCount ?? 0) > 0) {
+      handleOpenThread(messageId);
+      return;
+    }
+
     const senderName = getUserDisplayName(
       message.sender.uid,
       message.sender.email,
@@ -559,6 +611,114 @@ const MainPage: React.FC = () => {
 
   const handleCancelReply = () => {
     setReplyingTo(null);
+  };
+
+  // Add function to handle thread opening
+  const handleOpenThread = async (messageId: string) => {
+    // Get all replies for this message
+    const messagesRef = collection(db, 'messages');
+    const repliesQuery = query(
+      messagesRef,
+      where('workspaceId', '==', workspaceId),
+      where('replyTo.messageId', '==', messageId),
+      orderBy('timestamp', 'asc')
+    );
+
+    const repliesSnapshot = await getDocs(repliesQuery);
+    const replies = repliesSnapshot.docs.map(doc => ({
+      id: doc.id,
+      text: doc.data().text,
+      sender: doc.data().sender,
+      timestamp: doc.data().timestamp?.toDate() || new Date(),
+      channel: doc.data().channel,
+      workspaceId: doc.data().workspaceId,
+      reactions: doc.data().reactions || {},
+      attachment: doc.data().attachment || null,
+      replyTo: doc.data().replyTo || null
+    }));
+
+    setSelectedThread({
+      messageId,
+      replies
+    });
+  };
+
+  // Add function to close thread
+  const handleCloseThread = () => {
+    setSelectedThread(null);
+  };
+
+  // Add wrapper functions to match MessageList prop types
+  const getDisplayNameForMessage = (senderId: string, senderEmail: string, senderDisplayName?: string) => {
+    return getUserDisplayName(senderId, senderEmail, usersCache, senderDisplayName);
+  };
+
+  const getPhotoURLForMessage = (senderId: string, senderPhotoURL?: string) => {
+    return getUserPhotoURL(senderId, usersCache, senderPhotoURL);
+  };
+
+  const handleThreadMessageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setThreadMessage(e.target.value);
+    handleTypingStatus();
+  }, [handleTypingStatus]);
+
+  const handleThreadSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!threadMessage.trim() || !auth.currentUser || !workspaceId || !isEmailVerified || !selectedThread) return;
+
+    try {
+      const messagesRef = collection(db, 'messages');
+      const messageData = {
+        text: threadMessage.trim(),
+        sender: {
+          uid: auth.currentUser.uid,
+          email: auth.currentUser.email,
+          displayName: auth.currentUser.displayName,
+          photoURL: auth.currentUser.photoURL
+        },
+        timestamp: serverTimestamp(),
+        channel: selectedChannel,
+        workspaceId,
+        replyTo: {
+          messageId: selectedThread.messageId,
+          threadId: selectedThread.messageId,
+          senderName: getUserDisplayName(
+            messages.find(m => m.id === selectedThread.messageId)?.sender.uid || '',
+            messages.find(m => m.id === selectedThread.messageId)?.sender.email || '',
+            usersCache,
+            messages.find(m => m.id === selectedThread.messageId)?.sender.displayName
+          )
+        }
+      };
+
+      const docRef = await addDoc(messagesRef, messageData);
+      
+      // Create a new message object with the sent data
+      const newMessage: Message = {
+        id: docRef.id,
+        text: messageData.text,
+        sender: {
+          uid: auth.currentUser.uid,
+          email: auth.currentUser.email || '',
+          displayName: auth.currentUser.displayName || undefined,
+          photoURL: auth.currentUser.photoURL || undefined
+        },
+        timestamp: new Date(), // Use current time for immediate display
+        channel: messageData.channel,
+        workspaceId: messageData.workspaceId,
+        replyTo: messageData.replyTo
+      };
+
+      // Update the thread's replies immediately
+      setSelectedThread(current => current ? {
+        ...current,
+        replies: [...current.replies, newMessage]
+      } : null);
+
+      setThreadMessage('');
+    } catch (error) {
+      console.error('Error sending message:', error);
+    }
   };
 
   return (
@@ -640,12 +800,15 @@ const MainPage: React.FC = () => {
               style={{ paddingBottom: '130px' }}
             >
               <MessageList 
-                messages={messages.filter(m => m.channel === selectedChannel)}
+                messages={messages.filter(m => 
+                  m.channel === selectedChannel && 
+                  !m.replyTo // Only show messages that aren't replies
+                )}
                 loading={loading}
                 isDirectMessage={isDirectMessage(selectedChannel)}
                 channelName={selectedChannel}
-                getUserDisplayName={(senderId, email, displayName) => getUserDisplayName(senderId, email, usersCache, displayName)}
-                getUserPhotoURL={(senderId, photoURL) => getUserPhotoURL(senderId, usersCache, photoURL)}
+                getUserDisplayName={getDisplayNameForMessage}
+                getUserPhotoURL={getPhotoURLForMessage}
                 shouldShowHeader={(msg, index, msgs) => shouldShowHeader(msg.sender.uid, index, msgs.map(m => m.sender.uid))}
                 formatTime={formatTime}
                 handleAddReaction={handleAddReaction}
@@ -654,6 +817,7 @@ const MainPage: React.FC = () => {
                 commonEmojis={COMMON_EMOJIS}
                 onReply={handleReply}
                 replyingToId={replyingTo?.messageId}
+                onOpenThread={handleOpenThread}
               />
             </div>
 
@@ -688,13 +852,110 @@ const MainPage: React.FC = () => {
               invitedUsers={invitedUsers}
               isInvitedUsersExpanded={isInvitedUsersExpanded}
               onInviteClick={() => {
-                      const modal = document.getElementById('invite-modal') as HTMLDialogElement;
-                      if (modal) modal.showModal();
-                    }}
+                const modal = document.getElementById('invite-modal') as HTMLDialogElement;
+                if (modal) modal.showModal();
+              }}
               onToggleInvitedUsers={() => setIsInvitedUsersExpanded(!isInvitedUsersExpanded)}
             />
           )}
+
+          {/* Thread Drawer */}
+          {selectedThread && (
+            <div className="fixed inset-0 z-20">
+              {/* Backdrop */}
+              <div 
+                className="absolute inset-0 bg-black/30" 
+                onClick={handleCloseThread}
+              />
+              {/* Drawer Content */}
+              <div className="absolute right-0 top-0 bottom-0 w-[480px] bg-base-200 shadow-xl transition-transform flex flex-col">
+                {/* Thread Header */}
+                <div className="navbar bg-base-300">
+                  <div className="flex-1">
+                    <span className="text-lg font-semibold">Thread</span>
+                  </div>
+                  <div className="flex-none">
+                    <button 
+                      className="btn btn-ghost btn-sm"
+                      onClick={handleCloseThread}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
+
+                {/* Thread Content */}
+                <div className="overflow-y-auto flex-1">
+                  <div className="p-4">
+                    {/* Original Message */}
+                    <MessageList
+                      messages={[messages.find(m => m.id === selectedThread.messageId)!]}
+                      loading={false}
+                      isDirectMessage={isDirectMessage(selectedChannel)}
+                      channelName={selectedChannel}
+                      getUserDisplayName={getDisplayNameForMessage}
+                      getUserPhotoURL={getPhotoURLForMessage}
+                      shouldShowHeader={() => true}
+                      formatTime={formatTime}
+                      handleAddReaction={handleAddReaction}
+                      formatFileSize={formatFileSize}
+                      getFileIcon={getFileIcon}
+                      commonEmojis={COMMON_EMOJIS}
+                      hideReplyButton={true}
+                    />
+
+                    {/* Divider */}
+                    <div className="divider">Replies</div>
+
+                    {/* Reply Messages */}
+                    <MessageList
+                      messages={selectedThread.replies}
+                      loading={false}
+                      isDirectMessage={isDirectMessage(selectedChannel)}
+                      channelName={selectedChannel}
+                      getUserDisplayName={getDisplayNameForMessage}
+                      getUserPhotoURL={getPhotoURLForMessage}
+                      shouldShowHeader={() => true}
+                      formatTime={formatTime}
+                      handleAddReaction={handleAddReaction}
+                      formatFileSize={formatFileSize}
+                      getFileIcon={getFileIcon}
+                      commonEmojis={COMMON_EMOJIS}
+                      hideReplyButton={true}
+                    />
+                  </div>
+                </div>
+
+                {/* Thread Input */}
+                <div className="p-4 bg-base-200 border-t border-base-300">
+                  <MessageInput 
+                    message={threadMessage}
+                    isEmailVerified={isEmailVerified}
+                    typingUsers={typingUsers}
+                    isDirectMessage={isDirectMessage(selectedChannel)}
+                    channelName={selectedChannel}
+                    displayName={dmUserInfo?.displayName || null}
+                    onMessageChange={handleThreadMessageChange}
+                    onSubmit={handleThreadSendMessage}
+                    onFileClick={() => {
+                      const modal = document.getElementById('file-upload-modal') as HTMLDialogElement;
+                      if (modal) modal.showModal();
+                    }}
+                    replyTo={{
+                      senderName: getUserDisplayName(
+                        messages.find(m => m.id === selectedThread.messageId)?.sender.uid || '',
+                        messages.find(m => m.id === selectedThread.messageId)?.sender.email || '',
+                        usersCache,
+                        messages.find(m => m.id === selectedThread.messageId)?.sender.displayName
+                      ),
+                      onCancel: handleCloseThread
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Modals */}
         <InviteModal onInvite={handleInviteUser} />
