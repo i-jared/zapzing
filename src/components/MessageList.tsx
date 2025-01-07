@@ -84,9 +84,11 @@ const MessageList: React.FC<MessageListProps> = ({
                 </div>
             ) : (
                 <div className="flex flex-col space-y-2" style={{
-                    backgroundImage: 'url("/assets/pattern_light.png")',
+                    backgroundImage: `url("/assets/${window.matchMedia('(prefers-color-scheme: dark)').matches ? 'pattern_dark' : 'pattern_light'}.png")`,
                     backgroundRepeat: 'repeat',
                     backgroundSize: '200px 200px',
+                    backgroundPosition: 'center',
+                    backgroundAttachment: 'fixed',
                     borderRadius: '0.5rem'
                 }}>
                     {messages.map((msg, index, filteredMessages) => (
