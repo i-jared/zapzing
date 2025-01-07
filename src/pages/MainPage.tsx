@@ -9,7 +9,7 @@ import ProfileModal from '../components/ProfileModal';
 import AccountModal from '../components/AccountModal';
 import FileUploadModal from '../components/FileUploadModal';
 import WorkspaceSidebar from '../components/WorkspaceSidebar';
-import { FaUserCircle, FaBuilding } from 'react-icons/fa';
+import { FaUserCircle, FaBuilding, FaFolder } from 'react-icons/fa';
 import { signOut } from 'firebase/auth';
 import { auth, db, storage } from '../firebase';
 import { 
@@ -828,6 +828,16 @@ const MainPage: React.FC = () => {
                   <>#{selectedChannel}</>
                 )}
               </h1>
+              <button
+                className="btn btn-ghost btn-xs btn-square w-fit"
+                onClick={() => {
+                  const modal = document.getElementById('files-modal') as HTMLDialogElement;
+                  if (modal) modal.showModal();
+                }}
+                title="Browse files"
+              >
+                <FaFolder className="w-6 h-3" />
+              </button>
             </div>
           </div>
           

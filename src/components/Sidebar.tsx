@@ -4,6 +4,9 @@ import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp,
 import { db } from '../firebase';
 import { auth } from '../firebase';
 
+const logoLight = '/assets/logo_light.png';
+const logoDark = '/assets/logo_dark.png';
+
 interface Channel {
     id: string;
     name: string;
@@ -172,25 +175,29 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
         >
             <div className="navbar bg-base-200" onClick={handleClick}>
                 <div className="flex-1">
-                    <div className="text-xl font-bold px-2">ZapZing</div>
+                    <img 
+                        src={logoLight} 
+                        className="h-14 block dark:hidden" 
+                        alt="ZapZing Logo" 
+                    />
+                    <img 
+                        src={logoDark} 
+                        className="h-8 hidden dark:block" 
+                        alt="ZapZing Logo" 
+                    />
                 </div>
             </div>
 
             <div className="p-4" onClick={handleClick}>
                 <div className="form-control mb-4">
-                    <div className="join w-full">
-                        <input
-                            type="text"
-                            placeholder="Search..."
-                            className="input input-bordered join-item w-full"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
-                        />
-                        <button className="btn join-item" onClick={(e) => e.stopPropagation()}>
-                            <FaSearch />
-                        </button>
-                    </div>
+                    <input
+                        type="text"
+                        placeholder="Search..."
+                        className="input input-bordered w-full"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                    />
                 </div>
 
                 <div className="menu bg-base-200 w-full rounded-box" onClick={(e) => e.stopPropagation()}>
@@ -253,7 +260,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                                             <span>{member.displayName || member.email}</span>
                                         </div>
                                         <div className="dropdown dropdown-end">
-                                            <label tabIndex={0} className="btn btn-ghost btn-xs !h-6 !min-h-0 !w-6 px-0">
+                                            <label tabIndex={0} className="btn btn-ghost btn-xs !h-6 !min-h-0 !w-8 px-0">
                                                 <FaEllipsisV className="w-3 h-3" />
                                             </label>
                                             <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
