@@ -50,8 +50,8 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
 
   return (
     <dialog id="profile-modal" className="modal">
-      <div className="modal-box">
-        <h3 className="font-bold text-lg mb-4">Edit Profile</h3>
+      <div className="modal-box bg-base-100">
+        <h3 className="font-bold text-lg mb-4 text-base-content">Edit Profile</h3>
         <form onSubmit={handleProfileUpdate}>
           <div className="form-control mb-4">
             <div className="flex flex-col items-center mb-4">
@@ -73,7 +73,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                     <FaUser className="w-12 h-12" />
                   )}
                   <div className="absolute bottom-0 right-0 bg-base-100 rounded-full p-2">
-                    <FaCamera className="w-4 h-4" />
+                    <FaCamera className="w-4 h-4 text-base-content" />
                   </div>
                 </div>
               </div>
@@ -90,23 +90,23 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
             </div>
 
             <label className="label">
-              <span className="label-text">Display Name</span>
+              <span className="label-text text-base-content">Display Name</span>
             </label>
             <input
               type="text"
               placeholder="Your name"
-              className="input input-bordered w-full"
+              className="input input-bordered w-full text-base-content placeholder:text-base-content/60 bg-base-100"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
             />
 
             <label className="label mt-4">
-              <span className="label-text flex items-center gap-2">
+              <span className="label-text flex items-center gap-2 text-base-content">
                 <FaPalette /> Theme
               </span>
             </label>
             <select 
-              className="select select-bordered w-full"
+              className="select select-bordered w-full text-base-content bg-base-100"
               value={currentTheme}
               onChange={(e) => onThemeChange(e.target.value)}
             >
@@ -120,14 +120,14 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
           
           {profileError && (
             <div className="alert alert-error mb-4">
-              <span>{profileError}</span>
+              <span className="text-error-content">{profileError}</span>
             </div>
           )}
 
           <div className="modal-action">
             <button 
               type="button" 
-              className="btn" 
+              className="btn text-base-content" 
               onClick={() => {
                 const modal = document.getElementById('profile-modal') as HTMLDialogElement;
                 if (modal) modal.close();

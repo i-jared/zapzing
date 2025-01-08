@@ -84,8 +84,8 @@ const MessageList: React.FC<MessageListProps> = ({
             ) : messages.length === 0 ? (
                 <div className="flex items-center justify-center py-8">
                     <div className="text-center opacity-50">
-                        <div className="text-lg font-semibold">No messages yet</div>
-                        <div className="text-sm">Send the first message to {isDirectMessage ? '@' : '#'}{channelName}</div>
+                        <div className="text-lg font-semibold text-base-content">No messages yet</div>
+                        <div className="text-sm text-base-content/70">Send the first message to {isDirectMessage ? '@' : '#'}{channelName}</div>
                     </div>
                 </div>
             ) : (

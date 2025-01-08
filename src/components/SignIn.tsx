@@ -74,13 +74,13 @@ const SignIn: React.FC<SignInProps> = ({ onPageChange, setLoading }) => {
       </form>
       <div className="divider text-base-content">OR</div>
       <div className="flex flex-col gap-2">
-        <button 
+        <button
           className="btn btn-outline w-full text-base-content"
           onClick={() => onPageChange('signup')}
         >
           Create Account
         </button>
-        <button 
+        <button
           className="btn btn-ghost btn-sm text-base-content"
           onClick={() => onPageChange('forgot-password')}
         >
