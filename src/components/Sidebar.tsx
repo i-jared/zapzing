@@ -21,6 +21,7 @@ import {
   hasUnseenMessages,
 } from "../utils/chat";
 import { UserData, Message, Channel } from "../types/chat";
+import ViewProfileModal from "./ViewProfileModal";
 
 const logoLight = "/assets/logo_light.png";
 const logoDark = "/assets/logo_dark.png";
@@ -61,6 +62,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
   const [activeUsers, setActiveUsers] = useState<Set<string>>(new Set());
   const [currentUserData, setCurrentUserData] = useState<UserData | null>(null);
+  const [selectedMemberForProfile, setSelectedMemberForProfile] = useState<WorkspaceMember | null>(null);
 
   // Add effect to listen for current user's data changes
   useEffect(() => {
@@ -530,7 +532,19 @@ const Sidebar: React.FC<SidebarProps> = ({
                       className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52"
                     >
                       <li key="view-profile">
-                        <a>View Profile</a>
+                        <a
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedMemberForProfile(member);
+                            const modal = document.getElementById(
+                              "view-profile-modal"
+                            ) as HTMLDialogElement;
+                            if (modal) modal.showModal();
+                            (e.currentTarget.closest("ul") as HTMLElement)?.blur();
+                          }}
+                        >
+                          View Profile
+                        </a>
                       </li>
                       <li key="mute-notifications">
                         <a
@@ -617,6 +631,15 @@ const Sidebar: React.FC<SidebarProps> = ({
           <button>close</button>
         </form>
       </dialog>
+
+      {/* Add ViewProfileModal */}
+      {selectedMemberForProfile && (
+        <ViewProfileModal
+          email={selectedMemberForProfile.email}
+          displayName={selectedMemberForProfile.displayName}
+          photoURL={selectedMemberForProfile.photoURL}
+        />
+      )}
     </div>
   );
 };
