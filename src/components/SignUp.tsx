@@ -86,9 +86,9 @@ const SignUp: React.FC<SignUpProps> = ({ onPageChange }) => {
           <button type="submit" className="btn btn-primary">Create Account</button>
         </div>
       </form>
-      <div className="divider">OR</div>
+      <div className="divider text-base-content">OR</div>
       <button 
-        className="btn btn-ghost w-full"
+        className="btn btn-ghost w-full text-base-content"
         onClick={() => onPageChange('signin')}
       >
         Already have an account? Sign in

@@ -35,33 +35,6 @@ const Authentication: React.FC = () => {
       <div className="card w-full max-w-sm bg-base-100 shadow-xl">
         <div className="card-body">
           {renderPage()}
-          <div className="divider text-base-content">OR</div>
-          <div className="flex flex-col gap-2">
-            {currentPage !== 'signin' && (
-              <button
-                className="btn btn-outline text-base-content"
-                onClick={() => setCurrentPage('signin')}
-              >
-                Sign In
-              </button>
-            )}
-            {currentPage !== 'signup' && (
-              <button
-                className="btn btn-outline text-base-content"
-                onClick={() => setCurrentPage('signup')}
-              >
-                Create Account
-              </button>
-            )}
-            {currentPage !== 'forgot-password' && (
-              <button
-                className="btn btn-outline text-base-content"
-                onClick={() => setCurrentPage('forgot-password')}
-              >
-                Forgot Password?
-              </button>
-            )}
-          </div>
         </div>
       </div>
     </div>
