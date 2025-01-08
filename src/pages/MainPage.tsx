@@ -1577,6 +1577,7 @@ const MainPage: React.FC = () => {
               workspaceId={workspaceId || ''}
             />
           )}
+{/* 1. Changed w-[500px] to w-screen md:w-[500px] */}
 
           {/* Thread Drawer */}
           {selectedThread && (
@@ -1587,7 +1588,7 @@ const MainPage: React.FC = () => {
                 onClick={handleCloseThread}
               />
               {/* Drawer Content */}
-              <div className="absolute right-0 top-0 bottom-0 w-[480px] bg-base-200 shadow-xl transition-transform flex flex-col">
+              <div className="absolute right-0 top-0 bottom-0 w-screen md:w-[480px] bg-base-200 shadow-xl transition-transform flex flex-col">
                 {/* Thread Header */}
                 <div className="navbar bg-base-300">
                   <div className="flex-1">
