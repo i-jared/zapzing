@@ -72,7 +72,7 @@ const MessageText: React.FC<MessageTextProps> = ({ text }) => {
       parts.push(
         <span
           key={match.index}
-          className="text-primary"
+          className="bg-accent text-accent-content"
         >
           @{match.content}
         </span>

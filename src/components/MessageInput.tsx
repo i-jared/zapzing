@@ -253,13 +253,13 @@ const MessageInput: React.FC<MessageInputProps> = ({
               )}
 
               {/* Main input area */}
-              <form onSubmit={onSubmit} className="flex items-center p-2">
+              <form onSubmit={onSubmit} className="flex items-center p-2 gap-2">
                 <button 
                   type="submit"
-                  className="btn btn-circle btn-primary mr-2" 
+                  className="btn btn-circle btn-sm btn-primary" 
                   disabled={!message.trim()}
                 >
-                  <Send className="w-5 h-5" />
+                  <Send className="w-4 h-4" />
                 </button>
 
                 <div className="relative flex-grow">
@@ -267,7 +267,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
                     ref={inputRef}
                     type="text"
                     placeholder={`Message ${channel?.name}`}
-                    className="input input-bordered w-full bg-base-100"
+                    className="input input-bordered input-md w-full focus:outline-none focus:border-primary bg-base-100 text-base-content placeholder:text-base-content/50"
                     value={message}
                     onChange={handleInputChange}
                     onKeyPress={handleKeyPress}
@@ -285,19 +285,18 @@ const MessageInput: React.FC<MessageInputProps> = ({
               </form>
 
               {/* Actions compartment below */}
-              <div className="p-2 bg-base-300 rounded-b-lg flex justify-between items-center">
-                <div className="flex items-center gap-1">
+              <div className="px-4 py-2 bg-base-300 rounded-b-lg flex justify-between items-center border-t border-base-content/10">
+                <div className="flex items-center gap-2">
                   <button 
                     type="button" 
-                    className="btn btn-ghost btn-sm"
+                    className="btn btn-ghost btn-sm btn-square"
                     onClick={onFileClick}
                   >
-                    <Paperclip className="w-4 h-4" />
+                    <Paperclip className="w-4 h-4 text-base-content/70 hover:text-base-content" />
                   </button>
-                  <div className="divider divider-horizontal mx-0"></div>
                   <div className="dropdown dropdown-top">
-                    <label tabIndex={0} className="btn btn-ghost btn-sm">
-                      <Smile className="w-4 h-4" />
+                    <label tabIndex={0} className="btn btn-ghost btn-sm btn-square">
+                      <Smile className="w-4 h-4 text-base-content/70 hover:text-base-content" />
                     </label>
                     <div tabIndex={0} className="dropdown-content z-[50] mb-2 shadow-lg">
                       <Picker 
@@ -314,7 +313,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
                     </div>
                   </div>
                 </div>
-                <span className="text-xs text-base-content/70">Press Enter to send</span>
+                <span className="text-xs text-base-content/50">Press Enter to send</span>
               </div>
             </div>
           </>
