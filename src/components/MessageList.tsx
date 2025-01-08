@@ -71,20 +71,21 @@ const MessageList: React.FC<MessageListProps> = ({
     hideReplyButton
 }) => {
     return (
-        <div className="p-4 min-h-full flex flex-col-reverse overflow-y-auto relative">
+        <div className="z-0 p-4 min-h-full flex flex-col-reverse overflow-y-auto relative">
             {/* Base solid background - can be any color or gradient */}
-            <div className="absolute inset-0 bg-base-100" />
+            <div className="fixed inset-x-0 bottom-0 top-16 bg-base-100" />
 
             {/* Masked pattern overlay */}
-            <div className="absolute inset-0 bg-base-200/20" style={{
-                maskImage: `url("/assets/${window.matchMedia('(prefers-color-scheme: dark)').matches ? 'pattern_dark' : 'pattern_light'}.png")`,
-                WebkitMaskImage: `url("/assets/${window.matchMedia('(prefers-color-scheme: dark)').matches ? 'pattern_dark' : 'pattern_light'}.png")`,
+            <div className="fixed inset-x-0 bottom-0 top-16 bg-base-200/20" style={{
+                maskImage: `url("/assets/pattern_dark.png")`,
+                WebkitMaskImage: `url("/assets/pattern_dark.png")`,
                 maskRepeat: 'repeat',
                 WebkitMaskRepeat: 'repeat',
                 maskSize: '200px 200px',
                 WebkitMaskSize: '200px 200px',
                 maskPosition: 'center',
                 WebkitMaskPosition: 'center',
+                WebkitMaskAttachment: 'fixed',
                 opacity: 0.9, // Adjust this value to control the intensity
             }} />
 
