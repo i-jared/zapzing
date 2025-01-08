@@ -153,14 +153,14 @@ const Workspaces: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-base-200">
-        <span className="loading loading-spinner loading-lg"></span>
+        <span className="loading loading-spinner loading-lg text-primary"></span>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen w-screen bg-base-200 flex flex-col">
-      <div className="navbar bg-base-300">
+      <div className="navbar bg-base-300 sticky top-0 z-10">
         <div className="flex-1">
           <div className="px-4">
             <img 
@@ -189,15 +189,15 @@ const Workspaces: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 p-8 flex justify-center">
-        <div className="w-full max-w-5xl">
+      <div className="flex-1 p-4 md:p-8 overflow-y-auto">
+        <div className="w-full max-w-5xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <h1 className="text-3xl font-bold text-base-content">Your Workspaces</h1>
-            <form onSubmit={handleJoinWorkspace} className="join">
+            <form onSubmit={handleJoinWorkspace} className="join w-full md:w-auto">
               <input
                 type="text"
                 placeholder="Enter workspace ID"
-                className="input input-bordered join-item text-base-content placeholder:text-base-content/60"
+                className="input input-bordered join-item flex-1 md:flex-none text-base-content placeholder:text-base-content/60"
                 value={workspaceId}
                 onChange={(e) => {
                   setWorkspaceId(e.target.value);

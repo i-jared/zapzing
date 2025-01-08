@@ -30,12 +30,14 @@ const App: React.FC = () => {
 
   return (
     <Router>
-      <Routes>
-        <Route path="/auth" element={isAuthenticated ? <Navigate to="/workspaces" /> : <Authentication />} />
-        <Route path="/workspace/:workspaceId" element={isAuthenticated ? <MainPage /> : <Navigate to="/auth" />} />
-        <Route path="/workspaces" element={isAuthenticated ? <Workspaces /> : <Navigate to="/auth" />} />
-        <Route path="/" element={isAuthenticated ? <Navigate to="/workspaces" /> : <LandingPage />} />
-      </Routes>
+      <div className="min-h-screen w-screen bg-base-100">
+        <Routes>
+          <Route path="/auth" element={isAuthenticated ? <Navigate to="/workspaces" /> : <Authentication />} />
+          <Route path="/workspace/:workspaceId" element={isAuthenticated ? <MainPage /> : <Navigate to="/auth" />} />
+          <Route path="/workspaces" element={isAuthenticated ? <Workspaces /> : <Navigate to="/auth" />} />
+          <Route path="/" element={isAuthenticated ? <Navigate to="/workspaces" /> : <LandingPage />} />
+        </Routes>
+      </div>
     </Router>
   );
 };
