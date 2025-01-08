@@ -276,13 +276,25 @@ const Sidebar: React.FC<SidebarProps> = ({
       channel.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const filteredMembers = workspaceMembers.filter(
-    (member) =>
-      member.uid !== auth.currentUser?.uid &&
-      (
-        member.displayName?.toLowerCase() || member.email.toLowerCase()
-      ).includes(searchTerm.toLowerCase())
-  );
+  const filteredMembers = workspaceMembers
+    .filter(
+      (member) =>
+        member.uid !== auth.currentUser?.uid &&
+        (
+          member.displayName?.toLowerCase() || member.email.toLowerCase()
+        ).includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => {
+      const isABlocked = currentUserData?.blockedUsers?.includes(a.uid) || false;
+      const isBBlocked = currentUserData?.blockedUsers?.includes(b.uid) || false;
+      
+      // If one is blocked and the other isn't, put blocked at the bottom
+      if (isABlocked && !isBBlocked) return 1;
+      if (!isABlocked && isBBlocked) return -1;
+      
+      // If both are blocked or both are not blocked, sort by name
+      return (a.displayName || a.email).localeCompare(b.displayName || b.email);
+    });
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -505,7 +517,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <div className="flex justify-between items-center">
                   <div
                     className={`flex items-center gap-2 ${
-                      currentUserData?.mutedDMs?.includes(member.uid)
+                      currentUserData?.mutedDMs?.includes(member.uid) ||
+                      currentUserData?.blockedUsers?.includes(member.uid)
                         ? "text-base-content/50"
                         : "text-base-content"
                     }`}
@@ -523,17 +536,18 @@ const Sidebar: React.FC<SidebarProps> = ({
                           </span>
                         </div>
                       )}
-                      <span
-                        className={`indicator-item badge badge-xs ${
-                          activeUsers.has(member.email)
-                            ? "badge-success"
-                            : "badge-neutral opacity-40"
-                        }`}
-                      ></span>
+                      {!currentUserData?.blockedUsers?.includes(member.uid) && (
+                        <span
+                          className={`indicator-item badge badge-xs ${
+                            activeUsers.has(member.email)
+                              ? "badge-success"
+                              : "badge-neutral opacity-40"
+                          }`}
+                        ></span>
+                      )}
                     </div>
                     <span
                       className={`${
-                        // Find DM channel with this member and check for unseen messages
                         channels.some(
                           (channel) =>
                             channel.dm?.includes(member.uid) &&
@@ -545,7 +559,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         )
                           ? "font-bold"
                           : ""
-                      }`}
+                      } ${currentUserData?.blockedUsers?.includes(member.uid) ? "line-through" : ""}`}
                     >
                       {member.displayName || member.email}
                     </span>
@@ -679,22 +693,16 @@ const Sidebar: React.FC<SidebarProps> = ({
         </form>
       </dialog>
 
-      {/* Add BlockUserModal */}
-      {selectedMemberForBlock && (
-        <BlockUserModal
-          userToBlock={selectedMemberForBlock}
-          onBlock={handleBlockUser}
-        />
-      )}
-
-      {/* Existing ViewProfileModal */}
-      {selectedMemberForProfile && (
-        <ViewProfileModal
-          email={selectedMemberForProfile.email}
-          displayName={selectedMemberForProfile.displayName}
-          photoURL={selectedMemberForProfile.photoURL}
-        />
-      )}
+      {/* Always render modals */}
+      <BlockUserModal
+        userToBlock={selectedMemberForBlock}
+        onBlock={handleBlockUser}
+      />
+      <ViewProfileModal
+        email={selectedMemberForProfile?.email}
+        displayName={selectedMemberForProfile?.displayName}
+        photoURL={selectedMemberForProfile?.photoURL}
+      />
     </div>
   );
 };

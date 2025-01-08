@@ -37,6 +37,7 @@ export interface UserData {
   photoURL: string | null;
   mutedDMs?: string[];  // Array of channel IDs of muted DMs
   mutedChannels?: string[];  // Array of channel IDs that are muted
+  blockedUsers?: string[];  // Array of user UIDs that are blocked
   lastSeen?: {
     [channelId: string]: {
       timestamp: { seconds: number; nanoseconds: number } | Date;
