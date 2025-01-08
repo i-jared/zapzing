@@ -55,26 +55,28 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
         <form onSubmit={handleProfileUpdate}>
           <div className="form-control mb-4">
             <div className="flex flex-col items-center mb-4">
-              <div className="avatar placeholder cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                <div className="bg-neutral text-neutral-content rounded-full w-24 h-24 relative flex items-center justify-center">
-                  {profilePicture ? (
-                    <img
-                      src={URL.createObjectURL(profilePicture)}
-                      alt="Profile preview"
-                      className="w-full h-full object-cover rounded-full"
-                    />
-                  ) : user?.photoURL ? (
-                    <img
-                      src={user.photoURL}
-                      alt="Current profile"
-                      className="w-full h-full object-cover rounded-full"
-                    />
-                  ) : (
-                    <FaUser className="w-12 h-12" />
-                  )}
-                  <div className="absolute bottom-0 right-0 bg-base-100 rounded-full p-2">
-                    <FaCamera className="w-4 h-4 text-base-content" />
+              <div className="relative">
+                <div className="avatar placeholder cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                  <div className="bg-neutral text-neutral-content rounded-full w-24 h-24 relative flex items-center justify-center">
+                    {profilePicture ? (
+                      <img
+                        src={URL.createObjectURL(profilePicture)}
+                        alt="Profile preview"
+                        className="w-full h-full object-cover rounded-full"
+                      />
+                    ) : user?.photoURL ? (
+                      <img
+                        src={user.photoURL}
+                        alt="Current profile"
+                        className="w-full h-full object-cover rounded-full"
+                      />
+                    ) : (
+                      <FaUser className="w-12 h-12" />
+                    )}
                   </div>
+                </div>
+                <div className="absolute bottom-0 right-0 bg-base-100 rounded-full p-2 shadow-md cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                  <FaCamera className="w-4 h-4 text-base-content" />
                 </div>
               </div>
               <input

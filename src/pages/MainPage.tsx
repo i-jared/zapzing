@@ -1383,6 +1383,12 @@ const MainPage: React.FC = () => {
                     <label
                       tabIndex={0}
                       className="btn btn-ghost btn-circle relative text-base-content"
+                      onClick={(e) => {
+                        const ul = e.currentTarget.parentElement?.parentElement?.querySelector('ul');
+                        if (ul) {
+                          ul.style.display = ul.style.display === 'none' ? 'block' : 'none';
+                        }
+                      }}
                     >
                       <FaUserCircle className="w-6 h-6" />
                       {!isEmailVerified && (
@@ -1393,6 +1399,7 @@ const MainPage: React.FC = () => {
                   <ul
                     tabIndex={0}
                     className="mt-3 z-[100] p-2 shadow menu menu-sm dropdown-content bg-base-200 rounded-box w-52"
+                    style={{ display: 'none' }}
                   >
                     <li key="profile">
                       <a
@@ -1577,7 +1584,6 @@ const MainPage: React.FC = () => {
               workspaceId={workspaceId || ''}
             />
           )}
-{/* 1. Changed w-[500px] to w-screen md:w-[500px] */}
 
           {/* Thread Drawer */}
           {selectedThread && (
