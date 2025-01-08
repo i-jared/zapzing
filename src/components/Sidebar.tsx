@@ -255,16 +255,18 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
         >
             <div className="navbar bg-base-200" onClick={handleClick}>
                 <div className="flex-1">
-                    <img
-                        src={logoLight}
-                        className="h-14 block dark:hidden"
-                        alt="ZapZing Logo"
-                    />
-                    <img
-                        src={logoDark}
-                        className="h-8 hidden dark:block"
-                        alt="ZapZing Logo"
-                    />
+                    <div className="relative w-60 h-14">
+                        <div className="absolute inset-0 bg-primary" style={{
+                            maskImage: `url(${logoLight})`,
+                            WebkitMaskImage: `url(${logoLight})`,
+                            maskRepeat: 'no-repeat',
+                            WebkitMaskRepeat: 'no-repeat',
+                            maskSize: 'auto 100%',
+                            WebkitMaskSize: 'auto 100%',
+                            maskPosition: 'left center',
+                            WebkitMaskPosition: 'left center'
+                        }} />
+                    </div>
                 </div>
             </div>
 
