@@ -888,7 +888,6 @@ const MainPage: React.FC = () => {
         const createdAt = 'toDate' in data.createdAt ? data.createdAt.toDate() : new Date(data.createdAt.seconds * 1000);
 
         if (data.dm) {
-            console.log('DM channel found:', data.dm);
           // For DM channels, we need to get the other user's info
           const otherUserId = data.dm.find(id => id !== auth.currentUser?.uid);
           if (otherUserId) {
@@ -914,7 +913,6 @@ const MainPage: React.FC = () => {
             dm: data.dm
           };
           await handleChannelSelect(channel);
-          return;
         }
 
         // Handle thread logic after a short delay to ensure channel switch is complete
@@ -929,8 +927,11 @@ const MainPage: React.FC = () => {
 
           // Set the message to scroll to
           messageToScrollToRef.current = result.message.id;
+          console.log('Setting message to scroll to:', result.message.id);
           const messageElement = document.getElementById(`message-${result.message.id}`);
+          console.log('Message element:', messageElement);
           if (messageElement) {
+            console.log('Scrolling message into view');
             messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
             messageElement.classList.add('bg-primary/10');
             setTimeout(() => {
