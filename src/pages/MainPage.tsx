@@ -1383,12 +1383,6 @@ const MainPage: React.FC = () => {
                     <label
                       tabIndex={0}
                       className="btn btn-ghost btn-circle relative text-base-content"
-                      onClick={(e) => {
-                        const ul = e.currentTarget.parentElement?.parentElement?.querySelector('ul');
-                        if (ul) {
-                          ul.style.display = ul.style.display === 'none' ? 'block' : 'none';
-                        }
-                      }}
                     >
                       <FaUserCircle className="w-6 h-6" />
                       {!isEmailVerified && (
@@ -1398,8 +1392,7 @@ const MainPage: React.FC = () => {
                   </div>
                   <ul
                     tabIndex={0}
-                    className="mt-3 z-[100] p-2 shadow menu menu-sm dropdown-content bg-base-200 rounded-box w-52"
-                    style={{ display: 'none' }}
+                    className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52"
                   >
                     <li key="profile">
                       <a
@@ -1409,6 +1402,7 @@ const MainPage: React.FC = () => {
                           ) as HTMLDialogElement;
                           if (modal) modal.showModal();
                         }}
+                        className="hover:bg-base-200 active:bg-base-300 px-4 py-2 rounded-lg text-base-content"
                       >
                         Profile
                       </a>
@@ -1423,7 +1417,7 @@ const MainPage: React.FC = () => {
                             if (modal) modal.showModal();
                           }
                         }}
-                        className="relative"
+                        className="hover:bg-base-200 active:bg-base-300 px-4 py-2 rounded-lg text-base-content relative"
                       >
                         Account
                         {!isEmailVerified && (
@@ -1432,7 +1426,10 @@ const MainPage: React.FC = () => {
                       </a>
                     </li>
                     <li key="sign-out">
-                      <a onClick={handleSignOut} className="text-error">
+                      <a 
+                        onClick={handleSignOut} 
+                        className="hover:bg-base-200 active:bg-base-300 px-4 py-2 rounded-lg text-error"
+                      >
                         Sign out
                       </a>
                     </li>
