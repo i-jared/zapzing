@@ -283,6 +283,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     .filter(
       (member) =>
         member.uid !== auth.currentUser?.uid &&
+        !usersCache[member.uid]?.blockedUsers?.includes(auth.currentUser?.uid || '') &&
         (
           member.displayName?.toLowerCase() || member.email.toLowerCase()
         ).includes(searchTerm.toLowerCase())
