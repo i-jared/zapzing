@@ -36,6 +36,7 @@ import { getUserDisplayName, getUserPhotoURL, setGlobalUsersCache } from '../uti
 import { handleProfileUpdate, handleEmailUpdate, handlePasswordUpdate, handleResendVerification } from '../utils/auth';
 import LinkListModal from '../components/LinkListModal';
 import MessageText from '../components/MessageText';
+import { MessageListRef } from '../components/MessageList';
 
 const COMMON_EMOJIS = ['👍', '❤️', '😂', '🎉', '🚀'];
 
@@ -89,6 +90,8 @@ const MainPage: React.FC = () => {
   const [currentTheme, setCurrentTheme] = useState(() => {
     return localStorage.getItem('theme') || 'light';
   });
+  const threadMessagesEndRef = useRef<HTMLDivElement>(null);
+  const mainMessageListRef = useRef<MessageListRef>(null);
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
@@ -418,6 +421,11 @@ const MainPage: React.FC = () => {
         await addDoc(messagesRef, messageData);
         setMessage('');
         setReplyingTo(null);
+        
+        // Add scroll after sending
+        setTimeout(() => {
+          mainMessageListRef.current?.scrollToBottom();
+        }, 100);
     } catch (error) {
         console.error('Error sending message:', error);
     }
@@ -706,6 +714,12 @@ const MainPage: React.FC = () => {
     handleTypingStatus();
   }, [handleTypingStatus]);
 
+  const scrollThreadToBottom = () => {
+    if (threadMessagesEndRef.current) {
+      threadMessagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   const handleThreadSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!threadMessage.trim() || !auth.currentUser || !workspaceId || !isEmailVerified || !selectedThread || !selectedChannel) return;
@@ -733,6 +747,7 @@ const MainPage: React.FC = () => {
 
       await addDoc(messagesRef, messageData);
       setThreadMessage('');
+      setTimeout(scrollThreadToBottom, 100);
     } catch (error) {
       console.error('Error sending thread message:', error);
     }
@@ -1143,6 +1158,7 @@ const MainPage: React.FC = () => {
               style={{ paddingBottom: '130px' }}
             >
               <MessageList 
+                ref={mainMessageListRef}
                 messages={messages.filter(m => 
                   selectedChannel && m.channel === selectedChannel.id && 
                   !m.replyTo // Only show messages that aren't replies
@@ -1219,11 +1235,11 @@ const MainPage: React.FC = () => {
                 {/* Thread Header */}
                 <div className="navbar bg-base-300">
                   <div className="flex-1">
-                    <span className="text-lg font-semibold">Thread</span>
+                    <span className="text-lg font-semibold text-base-content">Thread</span>
                   </div>
                   <div className="flex-none">
                     <button
-                      className="btn btn-ghost btn-sm"
+                      className="btn btn-ghost btn-sm text-base-content"
                       onClick={handleCloseThread}
                     >
                       ✕
@@ -1253,7 +1269,7 @@ const MainPage: React.FC = () => {
                     />
 
                     {/* Divider */}
-                    <div className="divider">Replies</div>
+                    <div className="divider text-base-content">Replies</div>
 
                     {/* Reply Messages */}
                     <MessageList
@@ -1272,6 +1288,7 @@ const MainPage: React.FC = () => {
                       commonEmojis={COMMON_EMOJIS}
                       hideReplyButton={true}
                     />
+                    <div ref={threadMessagesEndRef} />
                   </div>
                 </div>
 

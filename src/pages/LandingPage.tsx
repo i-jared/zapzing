@@ -71,7 +71,7 @@ const FeatureCard = ({ icon: Icon, title, description, delay }: any) => (
             scale: 1.05,
             boxShadow: "0 0 20px rgba(var(--p), 0.5)",
         }}
-        className="card bg-base-200 shadow-xl backdrop-blur-lg bg-opacity-50 hover:shadow-2xl transition-all duration-300 overflow-hidden"
+        className="card bg-base-300 shadow-xl backdrop-blur-lg hover:shadow-2xl transition-all duration-300 overflow-hidden"
     >
         <div className="card-body relative">
             <motion.div
@@ -88,8 +88,8 @@ const FeatureCard = ({ icon: Icon, title, description, delay }: any) => (
             >
                 <Icon />
             </motion.div>
-            <h3 className="card-title text-xl font-bold">{title}</h3>
-            <p>{description}</p>
+            <h3 className="card-title text-xl font-bold text-base-content">{title}</h3>
+            <p className="text-base-content/80">{description}</p>
         </div>
     </motion.div>
 );
@@ -119,7 +119,7 @@ const LandingPage = () => {
     return (
         <div className="min-h-screen bg-base-100 w-screen overflow-x-hidden">
             {/* Navigation */}
-            <nav className="navbar fixed top-0 z-50 bg-base-100 bg-opacity-90 backdrop-blur-sm shadow-lg w-screen">
+            <nav className="navbar fixed top-0 z-50 bg-base-200/90 backdrop-blur-sm shadow-lg w-screen">
                 <div className="w-full px-4 md:px-8">
                     <div className="flex-1">
                         <Link to="/" className="btn btn-ghost px-2 h-16">
@@ -136,7 +136,7 @@ const LandingPage = () => {
                         </Link>
                     </div>
                     <div className="flex-none gap-2">
-                        <Link to="/auth" className="btn btn-ghost">Login</Link>
+                        <Link to="/auth" className="btn btn-ghost text-base-content">Login</Link>
                         <Link to="/auth" className="btn btn-primary gap-2">
                             Get Started
                             <GiLightningArc className="animate-bounce" />
@@ -146,10 +146,8 @@ const LandingPage = () => {
             </nav>
 
             {/* Hero Section */}
-            <section className="hero min-h-screen w-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-primary/20 relative overflow-hidden">
-                <div className="absolute inset-0">
-                    <LightningPattern />
-                </div>
+            <section className="hero min-h-screen w-screen bg-base-100 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-base-300/20 to-secondary/10" />
                 <motion.div
                     className="absolute inset-0 bg-gradient-to-r from-primary/5 to-secondary/5"
                     animate={{
@@ -172,7 +170,7 @@ const LandingPage = () => {
                             {text}
                         </motion.h1>
                         <motion.p
-                            className="text-xl mb-8 opacity-80"
+                            className="text-xl mb-8 text-base-content/70"
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             transition={{ delay: 0.5 }}
@@ -200,7 +198,7 @@ const LandingPage = () => {
             {/* Features Section */}
             <section className="w-screen py-20 bg-base-200 relative overflow-hidden">
                 <div className="w-full px-4 md:px-8">
-                    <h2 className="text-4xl font-bold text-center mb-16">Why Choose ZapZing? ⚡</h2>
+                    <h2 className="text-4xl font-bold text-center mb-16 text-base-content">Why Choose ZapZing? ⚡</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
                         <FeatureCard
                             icon={FaMoneyBill}
@@ -231,9 +229,9 @@ const LandingPage = () => {
             </section>
 
             {/* Social Proof Section */}
-            <section className="w-screen py-20">
+            <section className="w-screen py-20 bg-base-100">
                 <div className="w-full px-4 md:px-8">
-                    <h2 className="text-4xl font-bold text-center mb-2">Trusted by My Immediate Family</h2>
+                    <h2 className="text-4xl font-bold text-center mb-2 text-base-content">Trusted by My Immediate Family</h2>
                     <div className="flex flex-wrap justify-center gap-8 max-w-7xl mx-auto">
                         <img src="/assets/mom.jpg" alt="Mom's testimonial" className="w-20 h-20 rounded-full object-cover" />
                         <img src="/assets/dad.jpg" alt="Dad's testimonial" className="w-20 h-20 rounded-full object-cover" />
@@ -243,7 +241,7 @@ const LandingPage = () => {
             </section>
 
             {/* Footer */}
-            <footer className="footer footer-center p-10 bg-gradient-to-t from-base-300 to-base-200 text-base-content w-screen">
+            <footer className="footer footer-center p-10 bg-base-300 text-base-content w-screen">
                 <div>
                     <div className="grid grid-flow-col gap-4">
                         <a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" className="btn btn-ghost btn-square group" target="_blank" rel="noopener noreferrer">

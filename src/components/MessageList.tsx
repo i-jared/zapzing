@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef, useImperativeHandle } from 'react';
 import { FaUser, FaSmile, FaExternalLinkAlt, FaDownload, FaFileImage, FaFilePdf, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileAlt, FaReply } from 'react-icons/fa';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
@@ -53,7 +53,11 @@ interface MessageListProps {
     isThread?: boolean;
 }
 
-const MessageList: React.FC<MessageListProps> = ({
+export interface MessageListRef {
+    scrollToBottom: () => void;
+}
+
+const MessageList = forwardRef<MessageListRef, MessageListProps>(({
     messages,
     loading,
     isDirectMessage,
@@ -71,9 +75,18 @@ const MessageList: React.FC<MessageListProps> = ({
     onOpenThread,
     hideReplyButton,
     isThread = false
-}) => {
+}, ref) => {
+    useImperativeHandle(ref, () => ({
+        scrollToBottom: () => {
+            const container = document.querySelector(isThread ? '.thread-messages' : '.main-messages');
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+    }));
+
     return (
-        <div className={`z-0 p-4 min-h-full flex flex-col-reverse overflow-y-auto relative ${isThread ? 'thread-messages' : 'main-messages'}`}>
+        <div className={`z-0 p-4 min-h-full ${isThread ? '' : 'flex flex-col-reverse overflow-y-auto'} relative ${isThread ? 'thread-messages' : 'main-messages'}`}>
             {/* Base solid background - can be any color or gradient */}
             {!isThread ? (
                 // Main chat background (fixed)
@@ -329,6 +342,6 @@ const MessageList: React.FC<MessageListProps> = ({
             </div>
         </div>
     );
-};
+});
 
 export default MessageList; 

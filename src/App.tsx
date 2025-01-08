@@ -22,8 +22,8 @@ const App: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <span className="loading loading-spinner loading-lg"></span>
+      <div className="min-h-screen w-screen flex items-center justify-center bg-base-100">
+        <span className="loading loading-spinner loading-lg text-primary"></span>
       </div>
     );
   }

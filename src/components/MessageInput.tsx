@@ -240,7 +240,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
               {/* Reply badge */}
               {replyTo && (
                 <div className="p-2 bg-base-300 rounded-t-lg flex items-center justify-between">
-                  <span className="text-sm opacity-70">
+                  <span className="text-sm opacity-70 text-base-content">
                     Replying to {replyTo.senderName}
                   </span>
                   <button 
