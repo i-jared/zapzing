@@ -11,6 +11,8 @@ import {
   doc,
   getDocs,
   limit,
+  updateDoc,
+  arrayUnion,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { auth } from "../firebase";
@@ -22,6 +24,7 @@ import {
 } from "../utils/chat";
 import { UserData, Message, Channel } from "../types/chat";
 import ViewProfileModal from "./ViewProfileModal";
+import BlockUserModal from "./BlockUserModal";
 
 const logoLight = "/assets/logo_light.png";
 const logoDark = "/assets/logo_dark.png";
@@ -63,6 +66,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [activeUsers, setActiveUsers] = useState<Set<string>>(new Set());
   const [currentUserData, setCurrentUserData] = useState<UserData | null>(null);
   const [selectedMemberForProfile, setSelectedMemberForProfile] = useState<WorkspaceMember | null>(null);
+  const [selectedMemberForBlock, setSelectedMemberForBlock] = useState<WorkspaceMember | null>(null);
 
   // Add effect to listen for current user's data changes
   useEffect(() => {
@@ -289,6 +293,36 @@ const Sidebar: React.FC<SidebarProps> = ({
     const drawer = document.getElementById('main-drawer') as HTMLInputElement;
     if (drawer) {
       drawer.checked = false;
+    }
+  };
+
+  const handleBlockUser = async (shouldReport: boolean) => {
+    if (!selectedMemberForBlock || !auth.currentUser) return;
+
+    try {
+      // Add your blocking logic here
+      console.log(`Blocking user ${selectedMemberForBlock.email} with report: ${shouldReport}`);
+      
+      // Example implementation:
+      const userRef = doc(db, "users", auth.currentUser.uid);
+      await updateDoc(userRef, {
+        blockedUsers: arrayUnion(selectedMemberForBlock.uid)
+      });
+
+      if (shouldReport) {
+        // Add reporting logic here
+        const reportsRef = collection(db, "reports");
+        await addDoc(reportsRef, {
+          reportedUser: selectedMemberForBlock.uid,
+          reportedBy: auth.currentUser.uid,
+          timestamp: serverTimestamp(),
+          type: "user_block"
+        });
+      }
+
+      setSelectedMemberForBlock(null);
+    } catch (error) {
+      console.error("Error blocking user:", error);
     }
   };
 
@@ -564,7 +598,20 @@ const Sidebar: React.FC<SidebarProps> = ({
                         </a>
                       </li>
                       <li key="block-user">
-                        <a className="text-error">Block User</a>
+                        <a
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedMemberForBlock(member);
+                            const modal = document.getElementById(
+                              "block-user-modal"
+                            ) as HTMLDialogElement;
+                            if (modal) modal.showModal();
+                            (e.currentTarget.closest("ul") as HTMLElement)?.blur();
+                          }}
+                          className="text-error"
+                        >
+                          Block User
+                        </a>
                       </li>
                     </ul>
                   </div>
@@ -632,7 +679,15 @@ const Sidebar: React.FC<SidebarProps> = ({
         </form>
       </dialog>
 
-      {/* Add ViewProfileModal */}
+      {/* Add BlockUserModal */}
+      {selectedMemberForBlock && (
+        <BlockUserModal
+          userToBlock={selectedMemberForBlock}
+          onBlock={handleBlockUser}
+        />
+      )}
+
+      {/* Existing ViewProfileModal */}
       {selectedMemberForProfile && (
         <ViewProfileModal
           email={selectedMemberForProfile.email}
