@@ -1220,6 +1220,7 @@ const MainPage: React.FC = () => {
                   <div className="p-4">
                     {/* Original Message */}
                     <MessageList
+                      isThread={true}
                       messages={[messages.find(m => m.id === selectedThread.messageId)!]}
                       loading={false}
                       isDirectMessage={!!selectedChannel?.dm}
@@ -1240,6 +1241,7 @@ const MainPage: React.FC = () => {
 
                     {/* Reply Messages */}
                     <MessageList
+                      isThread={true}
                       messages={selectedThread.replies}
                       loading={false}
                       isDirectMessage={!!selectedChannel?.dm}

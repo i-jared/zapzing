@@ -50,6 +50,7 @@ interface MessageListProps {
     replyingToId?: string;
     onOpenThread?: (messageId: string) => void;
     hideReplyButton?: boolean;
+    isThread?: boolean;
 }
 
 const MessageList: React.FC<MessageListProps> = ({
@@ -68,26 +69,52 @@ const MessageList: React.FC<MessageListProps> = ({
     onReply,
     replyingToId,
     onOpenThread,
-    hideReplyButton
+    hideReplyButton,
+    isThread = false
 }) => {
     return (
-        <div className="z-0 p-4 min-h-full flex flex-col-reverse overflow-y-auto relative">
+        <div className={`z-0 p-4 min-h-full flex flex-col-reverse overflow-y-auto relative ${isThread ? 'thread-messages' : 'main-messages'}`}>
             {/* Base solid background - can be any color or gradient */}
-            <div className="fixed inset-x-0 bottom-0 top-[3.5rem] bg-base-100" />
-
-            {/* Masked pattern overlay */}
-            <div className="fixed inset-x-0 bottom-0 top-[3.5rem] bg-base-200/20" style={{
-                maskImage: `url("/assets/pattern_dark.png")`,
-                WebkitMaskImage: `url("/assets/pattern_dark.png")`,
-                maskRepeat: 'repeat',
-                WebkitMaskRepeat: 'repeat',
-                maskSize: '200px 200px',
-                WebkitMaskSize: '200px 200px',
-                maskPosition: 'center',
-                WebkitMaskPosition: 'center',
-                WebkitMaskAttachment: 'fixed',
-                opacity: 0.9,
-            }} />
+            {!isThread ? (
+                // Main chat background (fixed)
+                <>
+                    <div className="fixed inset-x-0 bottom-0 top-[3.5rem] bg-base-100" />
+                    <div 
+                        className="fixed inset-x-0 bottom-0 top-[3.5rem] bg-base-200/20" 
+                        style={{
+                            maskImage: `url("/assets/pattern_dark.png")`,
+                            WebkitMaskImage: `url("/assets/pattern_dark.png")`,
+                            maskRepeat: 'repeat',
+                            WebkitMaskRepeat: 'repeat',
+                            maskSize: '200px 200px',
+                            WebkitMaskSize: '200px 200px',
+                            maskPosition: 'center',
+                            WebkitMaskPosition: 'center',
+                            WebkitMaskAttachment: 'fixed',
+                            opacity: 0.9,
+                        }} 
+                    />
+                </>
+            ) : (
+                // Thread background (absolute within container)
+                <>
+                    <div className="absolute inset-0 bg-base-100" />
+                    <div 
+                        className="absolute inset-0 bg-base-200/20" 
+                        style={{
+                            maskImage: `url("/assets/pattern_dark.png")`,
+                            WebkitMaskImage: `url("/assets/pattern_dark.png")`,
+                            maskRepeat: 'repeat',
+                            WebkitMaskRepeat: 'repeat',
+                            maskSize: '100px 100px',
+                            WebkitMaskSize: '100px 100px',
+                            maskPosition: 'center',
+                            WebkitMaskPosition: 'center',
+                            opacity: 0.9,
+                        }} 
+                    />
+                </>
+            )}
 
             {/* Content */}
             <div className="relative">
