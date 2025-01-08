@@ -68,6 +68,7 @@ const MainPage: React.FC = () => {
   const [selectedThread, setSelectedThread] = useState<{
     messageId: string;
     replies: Message[];
+    loading?: boolean;
   } | null>(null);
   const [threadMessage, setThreadMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -638,33 +639,48 @@ const MainPage: React.FC = () => {
   const handleOpenThread = async (messageId: string) => {
     if (!workspaceId || !selectedChannel?.id) return;
 
-    // Get all replies for this message
+    // Set initial loading state
+    setSelectedThread({
+        messageId,
+        replies: [],
+        loading: true
+    });
+
+    // Set up real-time subscription for thread replies
     const messagesRef = collection(db, 'messages');
     const repliesQuery = query(
-      messagesRef,
-      where('workspaceId', '==', workspaceId),
-      where('channel', '==', selectedChannel.id),
-      where('replyTo.messageId', '==', messageId),
-      orderBy('timestamp', 'asc')
+        messagesRef,
+        where('workspaceId', '==', workspaceId),
+        where('channel', '==', selectedChannel.id),
+        where('replyTo.messageId', '==', messageId),
+        orderBy('timestamp', 'asc')
     );
 
-    const repliesSnapshot = await getDocs(repliesQuery);
-    const replies = repliesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      text: doc.data().text,
-      sender: doc.data().sender,
-      timestamp: doc.data().timestamp?.toDate() || new Date(),
-      channel: doc.data().channel,
-      workspaceId: doc.data().workspaceId,
-      reactions: doc.data().reactions || {},
-      attachment: doc.data().attachment || null,
-      replyTo: doc.data().replyTo || null
-    }));
+    const unsubscribe = onSnapshot(repliesQuery, (snapshot) => {
+        const replies = snapshot.docs.map(doc => ({
+            id: doc.id,
+            text: doc.data().text,
+            sender: doc.data().sender,
+            timestamp: doc.data().timestamp?.toDate() || new Date(),
+            channel: doc.data().channel,
+            workspaceId: doc.data().workspaceId,
+            reactions: doc.data().reactions || {},
+            attachment: doc.data().attachment || null,
+            replyTo: doc.data().replyTo || null
+        }));
 
-    setSelectedThread({
-      messageId,
-      replies
+        setSelectedThread(current => 
+            current?.messageId === messageId ? {
+                messageId,
+                replies,
+                loading: false
+            } : current
+        );
     });
+
+    // Clean up subscription when thread is closed
+    const currentUnsubscribe = unsubscribe;
+    return () => currentUnsubscribe();
   };
 
   // Add function to close thread
@@ -1243,7 +1259,7 @@ const MainPage: React.FC = () => {
                     <MessageList
                       isThread={true}
                       messages={selectedThread.replies}
-                      loading={false}
+                      loading={selectedThread.loading ?? false}
                       isDirectMessage={!!selectedChannel?.dm}
                       channelName={selectedChannel?.name || ''}
                       getUserDisplayName={getDisplayNameForMessage}
