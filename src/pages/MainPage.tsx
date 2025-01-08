@@ -1574,6 +1574,7 @@ const MainPage: React.FC = () => {
               workspaceName={workspaceName}
               onSwitchWorkspace={() => navigate("/")}
               onCancelInvite={handleCancelInvite}
+              workspaceId={workspaceId || ''}
             />
           )}
 
