@@ -8,6 +8,7 @@ export default defineConfig({
         outDir: 'dist',
         emptyOutDir: true,
         assetsDir: 'assets',
+        copyPublicDir: true,
     },
     server: {
         port: 5173,
