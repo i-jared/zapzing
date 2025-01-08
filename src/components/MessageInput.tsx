@@ -257,7 +257,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
                 <button 
                   type="submit"
                   className="btn btn-circle btn-sm btn-primary" 
-                  disabled={!message.trim()}
+                  disabled={!message.trim() || !channel}
                 >
                   <Send className="w-4 h-4" />
                 </button>
@@ -266,11 +266,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
                   <input
                     ref={inputRef}
                     type="text"
-                    placeholder={`Message ${channel?.name}`}
+                    placeholder={channel ? `Message ${channel.name}` : 'Select a channel to start messaging'}
                     className="input input-bordered input-md w-full focus:outline-none focus:border-primary bg-base-100 text-base-content placeholder:text-base-content/50"
                     value={message}
                     onChange={handleInputChange}
                     onKeyPress={handleKeyPress}
+                    disabled={!channel}
                   />
 
                   {showMentionPopup && (
@@ -291,11 +292,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
                     type="button" 
                     className="btn btn-ghost btn-sm btn-square"
                     onClick={onFileClick}
+                    disabled={!channel}
                   >
                     <Paperclip className="w-4 h-4 text-base-content/70 hover:text-base-content" />
                   </button>
                   <div className="dropdown dropdown-top">
-                    <label tabIndex={0} className="btn btn-ghost btn-sm btn-square">
+                    <label tabIndex={0} className={`btn btn-ghost btn-sm btn-square ${!channel ? 'btn-disabled' : ''}`}>
                       <Smile className="w-4 h-4 text-base-content/70 hover:text-base-content" />
                     </label>
                     <div tabIndex={0} className="dropdown-content z-[50] mb-2 shadow-lg">

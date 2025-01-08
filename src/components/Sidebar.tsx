@@ -113,6 +113,13 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                 dm: doc.data().dm
             }));
             setChannels(channelsData);
+            // Select first channel if no channel is selected and there are channels available
+            if (!selectedChannel && channelsData.length > 0) {
+                const firstNonDMChannel = channelsData.find(channel => !channel.dm);
+                if (firstNonDMChannel) {
+                    onChannelSelect(firstNonDMChannel);
+                }
+            }
             setLoading(false);
         }, (error) => {
             console.error("Error fetching channels:", error);
