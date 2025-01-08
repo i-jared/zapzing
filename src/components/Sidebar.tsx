@@ -24,9 +24,10 @@ interface SidebarProps {
     selectedChannel: Channel | null;
     usersCache: Record<string, UserData>;
     messages: Message[];
+    onDeleteChannel?: (channelId: string) => Promise<void>;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selectedChannel, usersCache, messages }) => {
+const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selectedChannel, usersCache, messages, onDeleteChannel }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [channels, setChannels] = useState<Channel[]>([]);
     const [loading, setLoading] = useState(true);
@@ -328,10 +329,13 @@ const Sidebar: React.FC<SidebarProps> = ({ onChannelSelect, workspaceId, selecte
                                             </li>
                                             <li key="delete-channel">
                                                 <a 
-                                                    onClick={(e) => {
+                                                    onClick={async (e) => {
                                                         e.stopPropagation();
                                                         const modal = document.getElementById('delete-channel-modal') as HTMLDialogElement;
-                                                        if (modal) modal.showModal();
+                                                        if (modal) {
+                                                            modal.setAttribute('data-channel-id', channel.id);
+                                                            modal.showModal();
+                                                        }
                                                         (e.currentTarget.closest('ul') as HTMLElement)?.blur();
                                                     }}
                                                     className="text-error"

@@ -772,27 +772,53 @@ const MainPage: React.FC = () => {
       }
 
       try {
-        // Search through all messages
+        // Get all active channels first
+        const channelsRef = collection(db, 'channels');
+        const channelsSnapshot = await getDocs(channelsRef);
+        const activeChannels = new Set(channelsSnapshot.docs.map(doc => doc.id));
+
+        // Filter messages
         const results = allMessages
           .filter(msg => {
+            // Basic text search
             const searchText = msg.text.toLowerCase();
             const searchTerms = query.toLowerCase().split(' ');
-            return searchTerms.every(term => searchText.includes(term));
+            const textMatches = searchTerms.every(term => searchText.includes(term));
+
+            // Only include if channel still exists
+            const channelExists = activeChannels.has(msg.channel);
+
+            return textMatches && channelExists;
           })
           .map(async msg => {
             try {
               // Get channel info for context
-              const channelsRef = collection(db, 'channels');
               const channelDoc = await getDoc(doc(channelsRef, msg.channel));
-              const channelData = channelDoc.exists() ? channelDoc.data() as FirestoreChannel : null;
               
+              if (!channelDoc.exists()) {
+                return null; // Skip if channel doesn't exist
+              }
+
+              const channelData = channelDoc.data() as FirestoreChannel;
+
+              // For DM channels, verify both users still exist
+              if (channelData.dm) {
+                const otherUserId = channelData.dm.find(id => id !== auth.currentUser?.uid);
+                if (otherUserId) {
+                  const userDoc = await getDoc(doc(db, 'users', otherUserId));
+                  if (!userDoc.exists()) {
+                    return null; // Skip if other user doesn't exist
+                  }
+                }
+              }
+
               let context = 'Unknown Channel';
               if (channelData) {
                 context = channelData.dm ? 
                   `DM with ${channelData.name}` : 
                   `#${channelData.name}`;
               }
-              
+
               return {
                 message: msg,
                 preview: msg.text.length > 100 ? msg.text.slice(0, 100) + '...' : msg.text,
@@ -800,16 +826,12 @@ const MainPage: React.FC = () => {
               };
             } catch (error) {
               console.error('Error getting channel data:', error);
-              return {
-                message: msg,
-                preview: msg.text.length > 100 ? msg.text.slice(0, 100) + '...' : msg.text,
-                context: 'Unknown Channel'
-              };
+              return null;
             }
           });
 
-        // Resolve all channel lookups
-        const resolvedResults = await Promise.all(results);
+        // Resolve all channel lookups and filter out null results
+        const resolvedResults = (await Promise.all(results)).filter(result => result !== null);
         
         setSearchResults(resolvedResults.slice(0, 5)); // Limit to 5 results
       } catch (error) {
@@ -818,7 +840,7 @@ const MainPage: React.FC = () => {
         setIsSearching(false);
       }
     }, 300);
-  }, [allMessages]); // Depend on allMessages instead of messages
+  }, [allMessages]);
 
   // Add effect to handle scrolling to message
   useEffect(() => {
@@ -1007,6 +1029,20 @@ const MainPage: React.FC = () => {
 
     return () => unsubscribe();
   }, [workspaceId, selectedChannel?.id, auth.currentUser?.email]);
+
+  const handleDeleteChannel = async (channelId: string) => {
+    try {
+      await deleteDoc(doc(db, 'channels', channelId));
+      // Only clear selected channel if we're deleting the currently selected one
+      if (selectedChannel?.id === channelId) {
+        setSelectedChannel(null);
+      }
+      const modal = document.getElementById('delete-channel-modal') as HTMLDialogElement;
+      if (modal) modal.close();
+    } catch (error) {
+      console.error('Error deleting channel:', error);
+    }
+  };
 
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
@@ -1432,22 +1468,18 @@ const MainPage: React.FC = () => {
       {/* Channel Delete Confirmation Modal */}
       <dialog id="delete-channel-modal" className="modal">
         <div className="modal-box">
-          <h3 className="font-bold text-lg">Delete Channel</h3>
-          <p className="py-4">Are you sure you want to delete this channel? This action cannot be undone.</p>
+          <h3 className="font-bold text-lg text-base-content">Delete Channel</h3>
+          <p className="py-4 text-base-content/70">Are you sure you want to delete this channel? This action cannot be undone.</p>
           <div className="modal-action">
             <form method="dialog">
-              <button className="btn btn-ghost mr-2">Cancel</button>
+              <button className="btn btn-ghost mr-2 text-base-content">Cancel</button>
               <button 
-                className="btn btn-error" 
+                className="btn btn-error text-base-content" 
                 onClick={async () => {
-                  if (!selectedChannel) return;
-                  try {
-                    await deleteDoc(doc(db, 'channels', selectedChannel.id));
-                    setSelectedChannel(null);
-                    const modal = document.getElementById('delete-channel-modal') as HTMLDialogElement;
-                    if (modal) modal.close();
-                  } catch (error) {
-                    console.error('Error deleting channel:', error);
+                  const modal = document.getElementById('delete-channel-modal') as HTMLDialogElement;
+                  const channelId = modal?.getAttribute('data-channel-id');
+                  if (channelId) {
+                    await handleDeleteChannel(channelId);
                   }
                 }}
               >
@@ -1471,6 +1503,7 @@ const MainPage: React.FC = () => {
           selectedChannel={selectedChannel}
           usersCache={usersCache}
           messages={messages}
+          onDeleteChannel={handleDeleteChannel}
         />
       </div>
     </div>
