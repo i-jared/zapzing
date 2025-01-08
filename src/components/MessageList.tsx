@@ -73,10 +73,10 @@ const MessageList: React.FC<MessageListProps> = ({
     return (
         <div className="z-0 p-4 min-h-full flex flex-col-reverse overflow-y-auto relative">
             {/* Base solid background - can be any color or gradient */}
-            <div className="fixed inset-x-0 bottom-0 top-16 bg-base-100" />
+            <div className="fixed inset-x-0 bottom-0 top-[3.5rem] bg-base-100" />
 
             {/* Masked pattern overlay */}
-            <div className="fixed inset-x-0 bottom-0 top-16 bg-base-200/20" style={{
+            <div className="fixed inset-x-0 bottom-0 top-[3.5rem] bg-base-200/20" style={{
                 maskImage: `url("/assets/pattern_dark.png")`,
                 WebkitMaskImage: `url("/assets/pattern_dark.png")`,
                 maskRepeat: 'repeat',
@@ -86,7 +86,7 @@ const MessageList: React.FC<MessageListProps> = ({
                 maskPosition: 'center',
                 WebkitMaskPosition: 'center',
                 WebkitMaskAttachment: 'fixed',
-                opacity: 0.9, // Adjust this value to control the intensity
+                opacity: 0.9,
             }} />
 
             {/* Content */}

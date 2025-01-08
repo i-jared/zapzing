@@ -982,7 +982,7 @@ const MainPage: React.FC = () => {
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
       <div className="drawer-content flex flex-col bg-base-200 w-full">
         {/* Navbar */}
-        <div className="navbar bg-base-300 w-full">
+        <div className="z-10 navbar bg-base-200 w-full">
           <div className="flex-none lg:hidden">
             <label htmlFor="main-drawer" className="btn btn-square btn-ghost drawer-button">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="inline-block w-5 h-5 stroke-current">
@@ -1149,7 +1149,7 @@ const MainPage: React.FC = () => {
             </div>
 
             {/* Fixed Message Input */}
-            <div className="absolute bottom-0 left-0 right-0 bg-base-200 p-4">
+            <div className="absolute bottom-0 left-0 right-0 bg-base-200 p-0">
               <MessageInput 
                 message={message}
                 isEmailVerified={isEmailVerified}
