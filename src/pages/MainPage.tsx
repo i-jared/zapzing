@@ -92,6 +92,7 @@ const MainPage: React.FC = () => {
   });
   const threadMessagesEndRef = useRef<HTMLDivElement>(null);
   const mainMessageListRef = useRef<MessageListRef>(null);
+  const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
@@ -1050,137 +1051,208 @@ const MainPage: React.FC = () => {
       <div className="drawer-content flex flex-col bg-base-200 w-full">
         {/* Navbar */}
         <div className="z-10 navbar bg-base-200 w-full">
-          <div className="flex-none lg:hidden">
-            <label htmlFor="main-drawer" className="btn btn-square btn-ghost text-base-content">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="inline-block w-6 h-6 stroke-current">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path>
-              </svg>
-            </label>
-          </div>
-          <div className="flex-1">
-            <div className="flex flex-col">
-              <h1 className="text-2xl font-bold text-base-content">
-                {selectedChannel?.dm ? (
-                  <>@{selectedChannel.name}</>
-                ) : (
-                  <>#{selectedChannel?.name}</>
-                )}
-              </h1>
-              <div className="flex gap-1">
-                <button
-                  className="btn btn-ghost btn-xs btn-square w-fit text-base-content"
-                  onClick={() => {
-                    const modal = document.getElementById('files-modal') as HTMLDialogElement;
-                    if (modal) modal.showModal();
-                  }}
-                  title="Browse files"
-                >
-                  <FaFolder className="w-6 h-3" />
-                </button>
-                <button
-                  className="btn btn-ghost btn-xs btn-square w-fit text-base-content"
-                  onClick={() => {
-                    const modal = document.getElementById('links-modal') as HTMLDialogElement;
-                    if (modal) modal.showModal();
-                  }}
-                  title="Browse links"
-                >
-                  <FaLink className="w-6 h-3" />
-                </button>
-                <button
-                  className="btn btn-ghost btn-xs btn-square w-fit text-base-content"
-                  onClick={() => {
-                    const modal = document.getElementById('mentions-modal') as HTMLDialogElement;
-                    if (modal) modal.showModal();
-                  }}
-                  title="View mentions"
-                >
-                  <FaAt className="w-6 h-3" />
-                </button>
-              </div>
-            </div>
-          </div>
-          
-          {/* Search Bar */}
-          <div className="flex-none w-96 mx-4 relative">
-            <input
-              type="text"
-              placeholder="Search messages..."
-              className="input input-bordered w-full text-base-content placeholder:text-base-content/60"
-              value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-            />
-            
-            {(searchResults.length > 0 || isSearching) && (
-              <div 
-                className="absolute z-[100] bg-base-200 w-full shadow-lg rounded-box"
-                style={{ top: "calc(100% + 0.5rem)" }}
-              >
-                {isSearching ? (
-                  <div className="flex items-center justify-center p-4">
-                    <span className="loading loading-spinner loading-md text-base-content"></span>
-                  </div>
-                ) : (
-                  searchResults.map((result) => (
-                    <div
-                      key={result.message.id}
-                      onClick={() => {
-                        console.log('Search result clicked:', result);
-                        handleSearchResultClick(result);
-                      }}
-                      className="p-2 hover:bg-base-300 rounded-lg cursor-pointer"
-                    >
-                      <div className="text-sm font-medium text-base-content">{result.preview}</div>
-                      <div className="text-xs text-base-content/70">{result.context}</div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="flex-none gap-2">
-            <button 
-              className="btn btn-ghost btn-circle text-base-content"
-              onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
-              disabled={!isEmailVerified}
-              title={!isEmailVerified ? "Please verify your email to access workspace settings" : ""}
-            >
-              <FaBuilding className="w-5 h-5" />
-            </button>
-            <div className="dropdown dropdown-end">
-              <div className="indicator">
-                <label tabIndex={0} className="btn btn-ghost btn-circle relative text-base-content">
-                  <FaUserCircle className="w-6 h-6" />
-                  {!isEmailVerified && (
-                    <span className="absolute -top-1 -right-1 badge badge-error badge-xs w-3 h-3 p-0"></span>
-                  )}
+          {!isMobileSearchActive ? (
+            // Regular navbar content - shown when not searching
+            <>
+              <div className="flex-none lg:hidden">
+                <label htmlFor="main-drawer" className="btn btn-square btn-ghost text-base-content">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="inline-block w-6 h-6 stroke-current">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                  </svg>
                 </label>
               </div>
-              <ul tabIndex={0} className="mt-3 z-[100] p-2 shadow menu menu-sm dropdown-content bg-base-200 rounded-box w-52">
-                <li key="profile">
-                  <a onClick={() => {
-                    const modal = document.getElementById('profile-modal') as HTMLDialogElement;
-                    if (modal) modal.showModal();
-                  }}>Profile</a>
-                </li>
-                <li key="account">
-                  <a onClick={() => {
-                    if (auth.currentUser?.email) {
-                      const modal = document.getElementById('account-modal') as HTMLDialogElement;
-                      if (modal) modal.showModal();
-                    }
-                  }} className="relative">
-                    Account
-                    {!isEmailVerified && (
-                      <span className="badge badge-error badge-sm">!</span>
+              
+              <div className="flex-1">
+                <div className="flex flex-col">
+                  <h1 className="text-2xl font-bold text-base-content">
+                    {selectedChannel?.dm ? (
+                      <>@{selectedChannel.name}</>
+                    ) : (
+                      <>#{selectedChannel?.name}</>
                     )}
-                  </a>
-                </li>
-                <li key="sign-out"><a onClick={handleSignOut} className="text-error">Sign out</a></li>
-              </ul>
+                  </h1>
+                  <div className="flex gap-1">
+                    <button
+                      className="btn btn-ghost btn-xs btn-square w-fit text-base-content"
+                      onClick={() => {
+                        const modal = document.getElementById('files-modal') as HTMLDialogElement;
+                        if (modal) modal.showModal();
+                      }}
+                      title="Browse files"
+                    >
+                      <FaFolder className="w-6 h-3" />
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-xs btn-square w-fit text-base-content"
+                      onClick={() => {
+                        const modal = document.getElementById('links-modal') as HTMLDialogElement;
+                        if (modal) modal.showModal();
+                      }}
+                      title="Browse links"
+                    >
+                      <FaLink className="w-6 h-3" />
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-xs btn-square w-fit text-base-content"
+                      onClick={() => {
+                        const modal = document.getElementById('mentions-modal') as HTMLDialogElement;
+                        if (modal) modal.showModal();
+                      }}
+                      title="View mentions"
+                    >
+                      <FaAt className="w-6 h-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Search Bar - Modified for mobile */}
+              <div className="flex-none relative">
+                {/* Mobile Search Button */}
+                <button 
+                  className="btn btn-ghost btn-circle lg:hidden text-base-content"
+                  onClick={() => setIsMobileSearchActive(true)}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </button>
+
+                {/* Desktop Search - visible only on lg screens */}
+                <div className="hidden lg:block w-96 mx-4">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search messages..."
+                      className="input input-bordered w-full text-base-content placeholder:text-base-content/60"
+                      value={searchQuery}
+                      onChange={(e) => handleSearch(e.target.value)}
+                    />
+                    
+                    {(searchResults.length > 0 || isSearching) && (
+                      <div 
+                        className="absolute z-[100] bg-base-200 w-full shadow-lg rounded-box"
+                        style={{ top: "calc(100% + 0.5rem)" }}
+                      >
+                        {isSearching ? (
+                          <div className="flex items-center justify-center p-4">
+                            <span className="loading loading-spinner loading-md text-base-content"></span>
+                          </div>
+                        ) : (
+                          searchResults.map((result) => (
+                            <div
+                              key={result.message.id}
+                              onClick={() => {
+                                console.log('Search result clicked:', result);
+                                handleSearchResultClick(result);
+                              }}
+                              className="p-2 hover:bg-base-300 rounded-lg cursor-pointer"
+                            >
+                              <div className="text-sm font-medium text-base-content">{result.preview}</div>
+                              <div className="text-xs text-base-content/70">{result.context}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-none gap-2">
+                <button 
+                  className="btn btn-ghost btn-circle text-base-content"
+                  onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
+                  disabled={!isEmailVerified}
+                  title={!isEmailVerified ? "Please verify your email to access workspace settings" : ""}
+                >
+                  <FaBuilding className="w-5 h-5" />
+                </button>
+                <div className="dropdown dropdown-end">
+                  <div className="indicator">
+                    <label tabIndex={0} className="btn btn-ghost btn-circle relative text-base-content">
+                      <FaUserCircle className="w-6 h-6" />
+                      {!isEmailVerified && (
+                        <span className="absolute -top-1 -right-1 badge badge-error badge-xs w-3 h-3 p-0"></span>
+                      )}
+                    </label>
+                  </div>
+                  <ul tabIndex={0} className="mt-3 z-[100] p-2 shadow menu menu-sm dropdown-content bg-base-200 rounded-box w-52">
+                    <li key="profile">
+                      <a onClick={() => {
+                        const modal = document.getElementById('profile-modal') as HTMLDialogElement;
+                        if (modal) modal.showModal();
+                      }}>Profile</a>
+                    </li>
+                    <li key="account">
+                      <a onClick={() => {
+                        if (auth.currentUser?.email) {
+                          const modal = document.getElementById('account-modal') as HTMLDialogElement;
+                          if (modal) modal.showModal();
+                        }
+                      }} className="relative">
+                        Account
+                        {!isEmailVerified && (
+                          <span className="badge badge-error badge-sm">!</span>
+                        )}
+                      </a>
+                    </li>
+                    <li key="sign-out"><a onClick={handleSignOut} className="text-error">Sign out</a></li>
+                  </ul>
+                </div>
+              </div>
+            </>
+          ) : (
+            // Mobile Search View - shown when searching on mobile
+            <div className="w-full flex items-center gap-2 px-2">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  placeholder="Search messages..."
+                  className="input input-bordered w-full text-base-content placeholder:text-base-content/60"
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  autoFocus
+                />
+                {(searchResults.length > 0 || isSearching) && (
+                  <div 
+                    className="absolute z-[100] bg-base-200 w-full shadow-lg rounded-box"
+                    style={{ top: "calc(100% + 0.5rem)" }}
+                  >
+                    {isSearching ? (
+                      <div className="flex items-center justify-center p-4">
+                        <span className="loading loading-spinner loading-md text-base-content"></span>
+                      </div>
+                    ) : (
+                      searchResults.map((result) => (
+                        <div
+                          key={result.message.id}
+                          onClick={() => {
+                            console.log('Search result clicked:', result);
+                            handleSearchResultClick(result);
+                            setIsMobileSearchActive(false);
+                          }}
+                          className="p-2 hover:bg-base-300 rounded-lg cursor-pointer"
+                        >
+                          <div className="text-sm font-medium text-base-content">{result.preview}</div>
+                          <div className="text-xs text-base-content/70">{result.context}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+              <button 
+                className="btn btn-ghost text-base-content"
+                onClick={() => {
+                  setSearchQuery('');
+                  setIsMobileSearchActive(false);
+                }}
+              >
+                Cancel
+              </button>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Main Content with Right Sidebar */}
@@ -1506,6 +1578,61 @@ const MainPage: React.FC = () => {
           onDeleteChannel={handleDeleteChannel}
         />
       </div>
+
+      {/* Add this modal for mobile search */}
+      <dialog id="mobile-search-modal" className="modal modal-bottom sm:modal-middle">
+        <div className="modal-box p-0">
+          <div className="join w-full">
+            <input
+              type="text"
+              placeholder="Search messages..."
+              className="input input-bordered join-item w-full text-base-content placeholder:text-base-content/60"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoFocus
+            />
+            <button 
+              className="btn btn-ghost join-item text-base-content"
+              onClick={() => {
+                setSearchQuery('');
+                const modal = document.getElementById('mobile-search-modal') as HTMLDialogElement;
+                if (modal) modal.close();
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+          {isSearching && (
+            <div className="flex justify-center p-4">
+              <span className="loading loading-spinner loading-md"></span>
+            </div>
+          )}
+          {searchResults.length > 0 && (
+            <div className="max-h-96 overflow-y-auto p-2">
+              {searchResults.map((result) => (
+                <div 
+                  key={result.message.id} 
+                  className="card bg-base-100 shadow-sm mb-2 cursor-pointer hover:bg-base-200"
+                  onClick={() => {
+                    messageToScrollToRef.current = result.message.id;
+                    setSearchQuery('');
+                    const modal = document.getElementById('mobile-search-modal') as HTMLDialogElement;
+                    if (modal) modal.close();
+                  }}
+                >
+                  <div className="card-body p-4">
+                    <p className="text-sm opacity-70">{result.context}</p>
+                    <p className="text-base-content">{result.preview}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button>close</button>
+        </form>
+      </dialog>
     </div>
   );
 };
