@@ -281,6 +281,15 @@ const Sidebar: React.FC<SidebarProps> = ({
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
   };
+
+  // Add helper function to close drawer
+  const closeDrawer = () => {
+    const drawer = document.getElementById('main-drawer') as HTMLInputElement;
+    if (drawer) {
+      drawer.checked = false;
+    }
+  };
+
   return (
     <div
       className="w-80 min-h-full bg-base-100 text-base-content shadow-2xl relative z-30 border-r border-base-300"
@@ -334,7 +343,10 @@ const Sidebar: React.FC<SidebarProps> = ({
           {filteredChannels.map((channel) => (
             <li className="flex items-center px-0 py-1" key={channel.id}>
               <button
-                onClick={() => onChannelSelect(channel)}
+                onClick={() => {
+                  onChannelSelect(channel);
+                  closeDrawer();
+                }}
                 className={`${
                   selectedChannel?.id === channel.id
                     ? "bg-base-300"
@@ -448,7 +460,10 @@ const Sidebar: React.FC<SidebarProps> = ({
           {filteredMembers.map((member) => (
             <div key={member.uid} className="flex items-center px-0 py-1">
               <button
-                onClick={() => handleCreateDM(member)}
+                onClick={() => {
+                  handleCreateDM(member);
+                  closeDrawer();
+                }}
                 className={`hover:bg-base-200 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left bg-base-100`}
               >
                 <div className="flex justify-between items-center">
