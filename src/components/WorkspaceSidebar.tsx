@@ -18,6 +18,7 @@ interface WorkspaceSidebarProps {
   onToggleInvitedUsers: () => void;
   workspaceName: string;
   onSwitchWorkspace: () => void;
+  onCancelInvite: (email: string) => void;
 }
 
 const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
@@ -28,7 +29,8 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   onInviteClick,
   onToggleInvitedUsers,
   workspaceName,
-  onSwitchWorkspace
+  onSwitchWorkspace,
+  onCancelInvite
 }) => {
   return (
     <div className="w-80 bg-base-100 flex flex-col h-full border-l border-base-content/10 overflow-y-auto z-[20] relative">
@@ -106,13 +108,28 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                 <div className="text-sm text-base-content/50">No pending invites</div>
               ) : (
                 invitedUsers.map((email, index) => (
-                  <div key={index} className="flex items-center gap-2 hover:bg-base-200 p-2 rounded-lg">
-                    <div className="avatar placeholder">
-                      <div className="bg-neutral text-neutral-content rounded-full w-8 h-8 flex items-center justify-center">
-                        <FaUser className="w-4 h-4" />
+                  <div 
+                    key={index} 
+                    className="flex items-center justify-between hover:bg-base-200 p-2 rounded-lg group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="avatar placeholder">
+                        <div className="bg-neutral text-neutral-content rounded-full w-8 h-8 flex items-center justify-center">
+                          <FaUser className="w-4 h-4" />
+                        </div>
                       </div>
+                      <span className="text-base-content">{email}</span>
                     </div>
-                    <span className="text-base-content">{email}</span>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCancelInvite(email);
+                      }}
+                      className="btn btn-ghost btn-sm text-base-content opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Cancel invitation"
+                    >
+                      ✕
+                    </button>
                   </div>
                 ))
               )}

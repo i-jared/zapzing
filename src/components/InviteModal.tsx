@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 interface InviteModalProps {
-  onInvite: (email: string) => Promise<void>;
+  onInvite: (emailOrPattern: string) => Promise<void>;
 }
 
 const InviteModal: React.FC<InviteModalProps> = ({ onInvite }) => {
@@ -10,9 +10,28 @@ const InviteModal: React.FC<InviteModalProps> = ({ onInvite }) => {
   const [inviteError, setInviteError] = useState('');
   const [inviteSuccess, setInviteSuccess] = useState('');
 
+  const isValidEmailOrRegex = (input: string): boolean => {
+    // Check if it's a valid email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (emailRegex.test(input)) {
+      return true;
+    }
+
+    // Check if it's a valid regex pattern
+    try {
+      new RegExp(input);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
+    if (!inviteEmail.trim() || !isValidEmailOrRegex(inviteEmail.trim())) {
+      setInviteError('Please enter a valid email address or regex pattern');
+      return;
+    }
 
     setIsInviting(true);
     setInviteError('');
@@ -43,11 +62,11 @@ const InviteModal: React.FC<InviteModalProps> = ({ onInvite }) => {
         <form onSubmit={handleInvite}>
           <div className="form-control">
             <label className="label">
-              <span className="label-text text-base-content">Email Address</span>
+              <span className="label-text text-base-content">Email Address or Regex Pattern</span>
             </label>
             <input
-              type="email"
-              placeholder="colleague@company.com"
+              type="text"
+              placeholder="colleague@company.com or regex pattern"
               className="input input-bordered w-full text-base-content placeholder:text-base-content/60"
               value={inviteEmail}
               onChange={(e) => {

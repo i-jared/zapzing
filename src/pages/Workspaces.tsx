@@ -1,19 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FaPlus } from 'react-icons/fa';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  addDoc, 
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { FaPlus } from "react-icons/fa";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  addDoc,
   serverTimestamp,
   doc,
   getDoc,
   updateDoc,
-  arrayUnion
-} from 'firebase/firestore';
-import { auth, db } from '../firebase';
+  arrayUnion,
+} from "firebase/firestore";
+import { auth, db } from "../firebase";
 
 interface Workspace {
   id: string;
@@ -24,47 +24,51 @@ interface Workspace {
   createdAt: Date;
 }
 
-const logoLight = '/assets/logo_light.png';
-const logoDark = '/assets/logo_dark.png';
+const logoLight = "/assets/logo_light.png";
+const logoDark = "/assets/logo_dark.png";
 
 const Workspaces: React.FC = () => {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newWorkspaceName, setNewWorkspaceName] = useState('');
-  const [workspaceId, setWorkspaceId] = useState('');
+  const [newWorkspaceName, setNewWorkspaceName] = useState("");
+  const [workspaceId, setWorkspaceId] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
-  const [joinError, setJoinError] = useState('');
+  const [joinError, setJoinError] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
     if (!auth.currentUser) {
-      navigate('/auth');
+      navigate("/auth");
       return;
     }
 
     // Subscribe to workspaces where user is a member
-    const workspacesRef = collection(db, 'workspaces');
+    const workspacesRef = collection(db, "workspaces");
     const workspacesQuery = query(
       workspacesRef,
-      where('members', 'array-contains', auth.currentUser.email)
+      where("members", "array-contains", auth.currentUser.email)
     );
 
-    const unsubscribe = onSnapshot(workspacesQuery, (snapshot) => {
-      const workspacesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        name: doc.data().name,
-        createdBy: doc.data().createdBy,
-        members: doc.data().members,
-        invitedEmails: doc.data().invitedEmails,
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-      }));
-      setWorkspaces(workspacesData);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching workspaces:", error);
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(
+      workspacesQuery,
+      (snapshot) => {
+        const workspacesData = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          name: doc.data().name,
+          createdBy: doc.data().createdBy,
+          members: doc.data().members,
+          invitedEmails: doc.data().invitedEmails,
+          createdAt: doc.data().createdAt?.toDate() || new Date(),
+        }));
+        setWorkspaces(workspacesData);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error fetching workspaces:", error);
+        setLoading(false);
+      }
+    );
 
     return () => unsubscribe();
   }, [navigate]);
@@ -75,28 +79,30 @@ const Workspaces: React.FC = () => {
 
     setIsCreating(true);
     try {
-      const workspacesRef = collection(db, 'workspaces');
+      const workspacesRef = collection(db, "workspaces");
       const newWorkspace = await addDoc(workspacesRef, {
         name: newWorkspaceName.trim(),
         createdBy: auth.currentUser.email,
         members: [auth.currentUser.email],
         invitedEmails: [],
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
       });
 
       // Create a general channel for the new workspace
-      const channelsRef = collection(db, 'channels');
+      const channelsRef = collection(db, "channels");
       await addDoc(channelsRef, {
-        name: 'general',
+        name: "general",
         workspaceId: newWorkspace.id,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
       });
 
-      setNewWorkspaceName('');
-      const modal = document.getElementById('create-workspace-modal') as HTMLDialogElement;
+      setNewWorkspaceName("");
+      const modal = document.getElementById(
+        "create-workspace-modal"
+      ) as HTMLDialogElement;
       if (modal) modal.close();
     } catch (error) {
-      console.error('Error creating workspace:', error);
+      console.error("Error creating workspace:", error);
     } finally {
       setIsCreating(false);
     }
@@ -108,39 +114,55 @@ const Workspaces: React.FC = () => {
     if (!workspaceId.trim() || !currentUser?.email) return;
 
     setIsJoining(true);
-    setJoinError('');
+    setJoinError("");
 
     try {
-      const workspaceRef = doc(db, 'workspaces', workspaceId.trim());
+      const workspaceRef = doc(db, "workspaces", workspaceId.trim());
       const workspaceSnap = await getDoc(workspaceRef);
 
       if (!workspaceSnap.exists()) {
-        setJoinError('Workspace not found');
+        setJoinError("Workspace not found");
         return;
       }
 
       const workspaceData = workspaceSnap.data() as Workspace;
-      
+
       if (workspaceData.members.includes(currentUser.email)) {
         navigate(`/workspace/${workspaceId}`);
         return;
       }
 
-      if (!workspaceData.invitedEmails?.includes(currentUser.email)) {
-        setJoinError('You have not been invited to this workspace');
+      if (
+        !workspaceData.invitedEmails?.some((emailOrPattern) => {
+          const userEmail = currentUser.email;
+          if (!userEmail) return false;
+
+          try {
+            // Check if the entry is a valid regex pattern
+            const regex = new RegExp(emailOrPattern, "i");
+            return regex.test(userEmail);
+          } catch (e) {
+            // If it's not a valid regex, treat it as a normal email
+            return emailOrPattern.toLowerCase() === userEmail.toLowerCase();
+          }
+        })
+      ) {
+        setJoinError("You have not been invited to this workspace");
         return;
       }
 
       // Add user to workspace members
       await updateDoc(workspaceRef, {
         members: arrayUnion(currentUser.email),
-        invitedEmails: workspaceData.invitedEmails.filter(email => email !== currentUser.email)
+        invitedEmails: workspaceData.invitedEmails.filter(
+          (email) => email !== currentUser.email
+        ),
       });
 
       navigate(`/workspace/${workspaceId}`);
     } catch (error) {
-      console.error('Error joining workspace:', error);
-      setJoinError('Failed to join workspace');
+      console.error("Error joining workspace:", error);
+      setJoinError("Failed to join workspace");
     } finally {
       setIsJoining(false);
     }
@@ -163,23 +185,25 @@ const Workspaces: React.FC = () => {
       <div className="navbar bg-base-300 sticky top-0 z-10">
         <div className="flex-1">
           <div className="px-4">
-            <img 
-              src={logoLight} 
-              className="h-14 block dark:hidden" 
-              alt="ZapZing Logo" 
+            <img
+              src={logoLight}
+              className="h-14 block dark:hidden"
+              alt="ZapZing Logo"
             />
-            <img 
-              src={logoDark} 
-              className="h-8 hidden dark:block" 
-              alt="ZapZing Logo" 
+            <img
+              src={logoDark}
+              className="h-8 hidden dark:block"
+              alt="ZapZing Logo"
             />
           </div>
         </div>
         <div className="flex-none px-4">
-          <button 
+          <button
             className="btn btn-primary"
             onClick={() => {
-              const modal = document.getElementById('create-workspace-modal') as HTMLDialogElement;
+              const modal = document.getElementById(
+                "create-workspace-modal"
+              ) as HTMLDialogElement;
               if (modal) modal.showModal();
             }}
           >
@@ -192,8 +216,13 @@ const Workspaces: React.FC = () => {
       <div className="flex-1 p-4 md:p-8 overflow-y-auto">
         <div className="w-full max-w-5xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-            <h1 className="text-3xl font-bold text-base-content">Your Workspaces</h1>
-            <form onSubmit={handleJoinWorkspace} className="join w-full md:w-auto">
+            <h1 className="text-3xl font-bold text-base-content">
+              Your Workspaces
+            </h1>
+            <form
+              onSubmit={handleJoinWorkspace}
+              className="join w-full md:w-auto"
+            >
               <input
                 type="text"
                 placeholder="Enter workspace ID"
@@ -201,19 +230,21 @@ const Workspaces: React.FC = () => {
                 value={workspaceId}
                 onChange={(e) => {
                   setWorkspaceId(e.target.value);
-                  setJoinError('');
+                  setJoinError("");
                 }}
               />
-              <button 
-                type="submit" 
-                className={`btn btn-primary join-item ${isJoining ? 'loading' : ''}`}
+              <button
+                type="submit"
+                className={`btn btn-primary join-item ${
+                  isJoining ? "loading" : ""
+                }`}
                 disabled={isJoining || !workspaceId.trim()}
               >
                 Join Workspace
               </button>
             </form>
           </div>
-          
+
           {joinError && (
             <div className="alert alert-error mb-4">
               <span>{joinError}</span>
@@ -223,21 +254,30 @@ const Workspaces: React.FC = () => {
           {workspaces.length === 0 ? (
             <div className="card bg-base-100 shadow-xl">
               <div className="card-body text-center">
-                <h2 className="card-title justify-center text-base-content">No Workspaces Yet</h2>
-                <p className="text-base-content/70">Create your first workspace or join an existing one!</p>
+                <h2 className="card-title justify-center text-base-content">
+                  No Workspaces Yet
+                </h2>
+                <p className="text-base-content/70">
+                  Create your first workspace or join an existing one!
+                </p>
               </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {workspaces.map(workspace => (
-                <div 
-                  key={workspace.id} 
-                  className="card bg-base-100 shadow-xl hover:shadow-2xl transition-all hover:-translate-y-1 cursor-pointer" 
+              {workspaces.map((workspace) => (
+                <div
+                  key={workspace.id}
+                  className="card bg-base-100 shadow-xl hover:shadow-2xl transition-all hover:-translate-y-1 cursor-pointer"
                   onClick={() => handleSelectWorkspace(workspace.id)}
                 >
                   <div className="card-body">
-                    <h2 className="card-title text-base-content">{workspace.name}</h2>
-                    <p className="text-base-content/70">{workspace.members.length} member{workspace.members.length !== 1 ? 's' : ''}</p>
+                    <h2 className="card-title text-base-content">
+                      {workspace.name}
+                    </h2>
+                    <p className="text-base-content/70">
+                      {workspace.members.length} member
+                      {workspace.members.length !== 1 ? "s" : ""}
+                    </p>
                     <div className="card-actions justify-end mt-4">
                       <button className="btn btn-primary btn-sm">Open</button>
                     </div>
@@ -252,11 +292,15 @@ const Workspaces: React.FC = () => {
       {/* Create Workspace Modal */}
       <dialog id="create-workspace-modal" className="modal">
         <div className="modal-box">
-          <h3 className="font-bold text-lg mb-4 text-base-content">Create a Workspace</h3>
+          <h3 className="font-bold text-lg mb-4 text-base-content">
+            Create a Workspace
+          </h3>
           <form onSubmit={handleCreateWorkspace}>
             <div className="form-control">
               <label className="label">
-                <span className="label-text text-base-content">Workspace Name</span>
+                <span className="label-text text-base-content">
+                  Workspace Name
+                </span>
               </label>
               <input
                 type="text"
@@ -268,22 +312,24 @@ const Workspaces: React.FC = () => {
               />
             </div>
             <div className="modal-action">
-              <button 
-                type="button" 
-                className="btn" 
+              <button
+                type="button"
+                className="btn"
                 onClick={() => {
-                  const modal = document.getElementById('create-workspace-modal') as HTMLDialogElement;
+                  const modal = document.getElementById(
+                    "create-workspace-modal"
+                  ) as HTMLDialogElement;
                   if (modal) modal.close();
                 }}
               >
                 Cancel
               </button>
-              <button 
-                type="submit" 
-                className={`btn btn-primary ${isCreating ? 'loading' : ''}`}
+              <button
+                type="submit"
+                className={`btn btn-primary ${isCreating ? "loading" : ""}`}
                 disabled={isCreating || !newWorkspaceName.trim()}
               >
-                {isCreating ? 'Creating...' : 'Create Workspace'}
+                {isCreating ? "Creating..." : "Create Workspace"}
               </button>
             </div>
           </form>
@@ -296,4 +342,4 @@ const Workspaces: React.FC = () => {
   );
 };
 
-export default Workspaces; 
+export default Workspaces;

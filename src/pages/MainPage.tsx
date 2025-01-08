@@ -1199,6 +1199,25 @@ const MainPage: React.FC = () => {
     }
   };
 
+  // Add this function to handle canceling invites
+  const handleCancelInvite = async (email: string) => {
+    if (!workspaceId) return;
+
+    try {
+      const workspaceRef = doc(db, 'workspaces', workspaceId);
+      const workspaceDoc = await getDoc(workspaceRef);
+      
+      if (!workspaceDoc.exists()) return;
+
+      const currentInvites = workspaceDoc.data().invitedEmails || [];
+      await updateDoc(workspaceRef, {
+        invitedEmails: currentInvites.filter((e: string) => e !== email)
+      });
+    } catch (error) {
+      console.error('Error canceling invitation:', error);
+    }
+  };
+
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
@@ -1554,6 +1573,7 @@ const MainPage: React.FC = () => {
               }
               workspaceName={workspaceName}
               onSwitchWorkspace={() => navigate("/")}
+              onCancelInvite={handleCancelInvite}
             />
           )}
 
