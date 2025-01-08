@@ -13,6 +13,7 @@ import {
   limit,
   updateDoc,
   arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { auth } from "../firebase";
@@ -25,6 +26,7 @@ import {
 import { UserData, Message, Channel } from "../types/chat";
 import ViewProfileModal from "./ViewProfileModal";
 import BlockUserModal from "./BlockUserModal";
+import UnblockUserModal from "./UnblockUserModal";
 
 const logoLight = "/assets/logo_light.png";
 const logoDark = "/assets/logo_dark.png";
@@ -67,6 +69,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [currentUserData, setCurrentUserData] = useState<UserData | null>(null);
   const [selectedMemberForProfile, setSelectedMemberForProfile] = useState<WorkspaceMember | null>(null);
   const [selectedMemberForBlock, setSelectedMemberForBlock] = useState<WorkspaceMember | null>(null);
+  const [selectedMemberForUnblock, setSelectedMemberForUnblock] = useState<WorkspaceMember | null>(null);
 
   // Add effect to listen for current user's data changes
   useEffect(() => {
@@ -338,6 +341,21 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
+  const handleUnblockUser = async () => {
+    if (!selectedMemberForUnblock || !auth.currentUser) return;
+
+    try {
+      const userRef = doc(db, "users", auth.currentUser.uid);
+      await updateDoc(userRef, {
+        blockedUsers: arrayRemove(selectedMemberForUnblock.uid)
+      });
+
+      setSelectedMemberForUnblock(null);
+    } catch (error) {
+      console.error("Error unblocking user:", error);
+    }
+  };
+
   return (
     <div
       className="w-80 min-h-full bg-base-100 text-base-content shadow-2xl relative z-30 border-r border-base-300"
@@ -579,54 +597,72 @@ const Sidebar: React.FC<SidebarProps> = ({
                       tabIndex={0}
                       className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52"
                     >
-                      <li key="view-profile">
-                        <a
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedMemberForProfile(member);
-                            const modal = document.getElementById(
-                              "view-profile-modal"
-                            ) as HTMLDialogElement;
-                            if (modal) modal.showModal();
-                            (e.currentTarget.closest("ul") as HTMLElement)?.blur();
-                          }}
-                        >
-                          View Profile
-                        </a>
-                      </li>
-                      <li key="mute-notifications">
-                        <a
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!auth.currentUser) return;
-                            toggleDMMute(auth.currentUser.uid, member.uid);
-                            (
-                              e.currentTarget.closest("ul") as HTMLElement
-                            )?.blur();
-                          }}
-                        >
-                          {currentUserData?.mutedDMs?.includes(member.uid)
-                            ? "Unmute"
-                            : "Mute"}{" "}
-                          Notifications
-                        </a>
-                      </li>
-                      <li key="block-user">
-                        <a
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedMemberForBlock(member);
-                            const modal = document.getElementById(
-                              "block-user-modal"
-                            ) as HTMLDialogElement;
-                            if (modal) modal.showModal();
-                            (e.currentTarget.closest("ul") as HTMLElement)?.blur();
-                          }}
-                          className="text-error"
-                        >
-                          Block User
-                        </a>
-                      </li>
+                      {currentUserData?.blockedUsers?.includes(member.uid) ? (
+                        <li key="unblock-user">
+                          <a
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedMemberForUnblock(member);
+                              const modal = document.getElementById(
+                                "unblock-user-modal"
+                              ) as HTMLDialogElement;
+                              if (modal) modal.showModal();
+                              (e.currentTarget.closest("ul") as HTMLElement)?.blur();
+                            }}
+                          >
+                            Unblock User
+                          </a>
+                        </li>
+                      ) : (
+                        <>
+                          <li key="view-profile">
+                            <a
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedMemberForProfile(member);
+                                const modal = document.getElementById(
+                                  "view-profile-modal"
+                                ) as HTMLDialogElement;
+                                if (modal) modal.showModal();
+                                (e.currentTarget.closest("ul") as HTMLElement)?.blur();
+                              }}
+                            >
+                              View Profile
+                            </a>
+                          </li>
+                          <li key="mute-notifications">
+                            <a
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!auth.currentUser) return;
+                                toggleDMMute(auth.currentUser.uid, member.uid);
+                                (e.currentTarget.closest("ul") as HTMLElement)?.blur();
+                              }}
+                            >
+                              {currentUserData?.mutedDMs?.includes(member.uid)
+                                ? "Unmute"
+                                : "Mute"}{" "}
+                              Notifications
+                            </a>
+                          </li>
+                          <li key="block-user">
+                            <a
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedMemberForBlock(member);
+                                const modal = document.getElementById(
+                                  "block-user-modal"
+                                ) as HTMLDialogElement;
+                                if (modal) modal.showModal();
+                                (e.currentTarget.closest("ul") as HTMLElement)?.blur();
+                              }}
+                              className="text-error"
+                            >
+                              Block User
+                            </a>
+                          </li>
+                        </>
+                      )}
                     </ul>
                   </div>
                 </div>
@@ -702,6 +738,10 @@ const Sidebar: React.FC<SidebarProps> = ({
         email={selectedMemberForProfile?.email}
         displayName={selectedMemberForProfile?.displayName}
         photoURL={selectedMemberForProfile?.photoURL}
+      />
+      <UnblockUserModal
+        userToUnblock={selectedMemberForUnblock}
+        onUnblock={handleUnblockUser}
       />
     </div>
   );

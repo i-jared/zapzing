@@ -38,7 +38,6 @@ const BlockUserModal: React.FC<BlockUserModalProps> = ({
             <ul className="list-disc list-inside mb-4 text-base-content/70">
               <li>Send you direct messages</li>
               <li>See your online status</li>
-              <li>Add you to group channels</li>
             </ul>
             <div className="modal-action flex gap-2">
               <form method="dialog">
