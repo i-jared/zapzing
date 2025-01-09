@@ -235,7 +235,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
               {/* Typing indicator */}
               {Object.keys(typingUsers).length > 0 && (
                 <div className="p-2 bg-base-300 rounded-t-lg">
-                  <span className="text-xs opacity-70 text-base-content">
+                  <span className="text-xs opacity-70">
                     {Object.values(typingUsers)
                       .map(user => user.displayName || user.email)
                       .join(', ')}{' '}
