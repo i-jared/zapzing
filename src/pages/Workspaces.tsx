@@ -47,7 +47,7 @@ const Workspaces: React.FC = () => {
     const workspacesRef = collection(db, "workspaces");
     const workspacesQuery = query(
       workspacesRef,
-      where("members", "array-contains", auth.currentUser.email)
+      where("members", "array-contains", auth.currentUser.uid)
     );
 
     const unsubscribe = onSnapshot(

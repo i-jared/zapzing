@@ -16,20 +16,20 @@ const FileUploadModal: React.FC<FileUploadModalProps> = ({
 }) => {
   return (
     <dialog id="file-upload-modal" className="modal">
-      <div className="modal-box">
-        <h3 className="font-bold text-lg mb-4">Upload File</h3>
+      <div className="modal-box bg-base-100">
+        <h3 className="font-bold text-lg text-base-content mb-4">Upload File</h3>
         <div className="form-control">
           {selectedFile ? (
             <div className="flex flex-col items-center gap-4">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-base-content">
                 <FaFile className="w-8 h-8" />
                 <div>
                   <div className="font-medium">{selectedFile.name}</div>
-                  <div className="text-sm opacity-70">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</div>
+                  <div className="text-sm text-base-content/70">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</div>
                 </div>
               </div>
               <button 
-                className="btn btn-primary w-full"
+                className="btn btn-primary w-full text-primary-content"
                 onClick={() => onFileUpload(selectedFile)}
               >
                 Send File
@@ -47,21 +47,23 @@ const FileUploadModal: React.FC<FileUploadModalProps> = ({
                   }}
                 />
                 <div className="border-2 border-dashed border-base-content/20 rounded-lg p-8 text-center hover:border-base-content/40 transition-colors">
-                  <FaFile className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <div className="font-medium">Click to select a file</div>
-                  <div className="text-sm opacity-70">or drag and drop</div>
+                  <FaFile className="w-12 h-12 mx-auto mb-4 text-base-content/50" />
+                  <div className="font-medium text-base-content">Click to select a file</div>
+                  <div className="text-sm text-base-content/70">or drag and drop</div>
                 </div>
               </label>
             </div>
           )}
         </div>
         <div className="modal-action">
-          <button 
-            className="btn" 
-            onClick={onClose}
-          >
-            Cancel
-          </button>
+          <form method="dialog">
+            <button 
+              className="btn btn-ghost text-base-content" 
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+          </form>
         </div>
       </div>
       <form method="dialog" className="modal-backdrop">
