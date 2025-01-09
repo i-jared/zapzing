@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { createUserWithEmailAndPassword, AuthError } from 'firebase/auth';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import { initializeUserData } from '../utils/auth';
@@ -17,34 +17,6 @@ const SignUp: React.FC<SignUpProps> = ({ onPageChange }) => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const getErrorMessage = (error: AuthError) => {
-    switch (error.code) {
-      case 'auth/email-already-in-use':
-        return 'An account with this email already exists';
-      case 'auth/invalid-email':
-        return 'Invalid email address format';
-      case 'auth/operation-not-allowed':
-        return 'Email/password accounts are not enabled. Please contact support';
-      case 'auth/weak-password':
-        return 'Password should be at least 6 characters long';
-      default:
-        return error.message || 'Failed to create account';
-    }
-  };
-
-  const validatePassword = (password: string): string | null => {
-    if (password.length < 6) {
-      return 'Password must be at least 6 characters long';
-    }
-    if (!/\d/.test(password)) {
-      return 'Password must contain at least one number';
-    }
-    if (!/[a-zA-Z]/.test(password)) {
-      return 'Password must contain at least one letter';
-    }
-    return null;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -54,19 +26,14 @@ const SignUp: React.FC<SignUpProps> = ({ onPageChange }) => {
       return;
     }
 
-    const passwordError = validatePassword(password);
-    if (passwordError) {
-      setError(passwordError);
-      return;
-    }
-
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      // Initialize user data with FCM token
       await initializeUserData(userCredential.user);
       navigate('/');
     } catch (err: any) {
       console.error('Sign up error:', err);
-      setError(getErrorMessage(err));
+      setError(err.message || 'Failed to create account');
     }
   };
 

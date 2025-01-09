@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { sendPasswordResetEmail, AuthError } from 'firebase/auth';
+import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../firebase';
 
 type AuthPage = 'signin' | 'signup' | 'forgot-password';
@@ -13,35 +13,17 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onPageChange }) => {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  const getErrorMessage = (error: AuthError) => {
-    switch (error.code) {
-      case 'auth/invalid-email':
-        return 'Invalid email address format';
-      case 'auth/user-not-found':
-        return 'No account found with this email';
-      case 'auth/too-many-requests':
-        return 'Too many password reset attempts. Please try again later';
-      default:
-        return error.message || 'Failed to send reset email';
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setMessage('');
 
-    if (!email.trim()) {
-      setError('Please enter your email address');
-      return;
-    }
-
     try {
       await sendPasswordResetEmail(auth, email);
-      setMessage('Password reset email sent! Please check your inbox and spam folder.');
+      setMessage('Password reset email sent! Check your inbox.');
     } catch (error: any) {
       console.error('Error sending password reset email:', error);
-      setError(getErrorMessage(error));
+      setError(error.message || 'Failed to send reset email');
     }
   };
 
@@ -76,9 +58,9 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onPageChange }) => {
           Send Reset Link
         </button>
       </form>
-      <div className="divider text-base-content">OR</div>
+      <div className="divider">OR</div>
       <button 
-        className="btn btn-ghost w-full text-base-content"
+        className="btn btn-ghost w-full"
         onClick={() => onPageChange('signin')}
       >
         Back to Sign In
