@@ -1,5 +1,5 @@
-import React from 'react';
-import { FaSearch, FaLink, FaExternalLinkAlt } from 'react-icons/fa';
+import React, { useState, useEffect } from 'react';
+import { FaSearch, FaLink, FaExternalLinkAlt, FaSpinner } from 'react-icons/fa';
 
 interface Message {
   id: string;
@@ -21,8 +21,124 @@ interface LinkListModalProps {
   getUserDisplayName: (uid: string, email: string, displayName?: string) => string;
 }
 
+interface OpenGraphData {
+  title?: string;
+  description?: string;
+  image?: string;
+  siteName?: string;
+  url?: string;
+}
+
 // Updated regex to catch more URL patterns
 const URL_REGEX = /(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)/gi;
+
+// Link Preview Component
+const LinkPreview: React.FC<{ url: string }> = ({ url }) => {
+  const [ogData, setOgData] = useState<OpenGraphData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchOgData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Ensure URL has protocol
+        const urlWithProtocol = url.startsWith('http') ? url : `https://${url}`;
+        
+        // Use a proxy service to avoid CORS issues and fetch OpenGraph data
+        const response = await fetch(`https://api.microlink.io?url=${encodeURIComponent(urlWithProtocol)}`);
+        const data = await response.json();
+
+        if (data.status === 'success') {
+          setOgData({
+            title: data.data.title,
+            description: data.data.description,
+            image: data.data.image?.url,
+            siteName: data.data.publisher,
+            url: urlWithProtocol,
+          });
+        } else {
+          setError('Failed to load preview');
+        }
+      } catch (err) {
+        setError('Failed to load preview');
+        console.error('Error fetching OpenGraph data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOgData();
+  }, [url]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-4 bg-base-200 rounded-lg">
+        <FaSpinner className="animate-spin text-base-content w-6 h-6" />
+      </div>
+    );
+  }
+
+  if (error || !ogData) {
+    return (
+      <div className="flex items-center gap-4 p-4 bg-base-200 rounded-lg">
+        <FaLink className="text-base-content/70 w-6 h-6" />
+        <div className="flex-1 min-w-0">
+          <div className="font-medium break-all text-base-content">{url}</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card bg-base-200 hover:bg-base-300 transition-colors">
+      <div className="p-4">
+        <div className="flex gap-4">
+          {ogData.image && (
+            <div className="flex-shrink-0">
+              <img
+                src={ogData.image}
+                alt={ogData.title || 'Link preview'}
+                className="max-w-[200px] max-h-[150px] w-auto h-auto object-contain rounded-lg"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <h3 className="font-medium text-base-content">
+              {ogData.title || url}
+            </h3>
+            {ogData.description && (
+              <p className="text-sm text-base-content/70 mt-1 line-clamp-2">
+                {ogData.description}
+              </p>
+            )}
+            {ogData.siteName && (
+              <p className="text-xs text-base-content/50 mt-2">
+                {ogData.siteName}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="mt-2">
+          <a
+            href={ogData.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-sm btn-ghost gap-2 text-base-content"
+          >
+            <FaExternalLinkAlt />
+            Open Link
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const LinkListModal: React.FC<LinkListModalProps> = ({
   messages,
@@ -75,34 +191,14 @@ const LinkListModal: React.FC<LinkListModalProps> = ({
         <div className="overflow-y-auto max-h-[60vh]">
           <div className="grid grid-cols-1 gap-4 min-h-[50vh]">
             {filteredLinks.map((item, index) => (
-              <div key={`${item.message.id}-${index}`} className="card bg-base-100">
-                <div className="card-body p-4">
-                  <div className="flex items-start gap-4">
-                    <div className="text-3xl text-base-content/70">
-                      <FaLink />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium break-all text-base-content">{item.url}</div>
-                      <div className="mt-2">
-                        <a 
-                          href={item.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="btn btn-sm btn-ghost gap-2 text-base-content"
-                        >
-                          <FaExternalLinkAlt />
-                          Open Link
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-xs text-base-content/70 mt-2">
-                    Shared by {getUserDisplayName(
-                      item.message.sender.uid,
-                      item.message.sender.email,
-                      item.message.sender.displayName
-                    )} on {item.message.timestamp.toLocaleDateString()}
-                  </div>
+              <div key={`${item.message.id}-${index}`}>
+                <LinkPreview url={item.url} />
+                <div className="text-xs text-base-content/70 mt-2 px-4">
+                  Shared by {getUserDisplayName(
+                    item.message.sender.uid,
+                    item.message.sender.email,
+                    item.message.sender.displayName
+                  )} on {item.message.timestamp.toLocaleDateString()}
                 </div>
               </div>
             ))}
