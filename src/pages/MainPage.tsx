@@ -137,13 +137,11 @@ const MainPage: React.FC = () => {
       try {
         // Request notification permission first
         const permission = await Notification.requestPermission();
-        console.log("Notification permission:", permission);
 
         if (permission === "granted") {
           // Get FCM token
           const token = await getFCMToken();
           if (token) {
-            console.log("FCM Token:", token);
             // Here you could save the token to your user's document in Firestore
             if (auth.currentUser) {
               const userRef = doc(db, "users", auth.currentUser.uid);
@@ -155,20 +153,16 @@ const MainPage: React.FC = () => {
 
           // Listen for foreground messages
           const unsubscribe = onMessage(messaging, (payload) => {
-            console.log("Received foreground message:", payload);
             const { channelId } = payload.data || {};
 
             // Only display if channelId != selectedChannel.id
-            console.log("channelId ", channelId, " selectedChannel?.id ", selectedChannel?.id);
             if (channelId && channelId !== selectedChannel?.id) {
-            // if (true) {
+              // if (true) {
               // Display a browser notification
               new Notification(payload.notification?.title ?? "New Message", {
                 body: payload.notification?.body ?? "",
                 icon: "/assets/logo_light.png",
               });
-
-              console.log("Playing notification sound");
 
               // Play notification sound
               const audio = new Audio("/assets/notif-sound.wav");
@@ -1048,7 +1042,11 @@ const MainPage: React.FC = () => {
       const channelMessages = messages.filter((m) => m.channel === channel.id);
       if (channelMessages.length > 0) {
         const latestMessage = channelMessages[channelMessages.length - 1];
-        await updateLastSeen(auth.currentUser.uid, channel, latestMessage.id);
+        await updateLastSeen(
+          auth.currentUser.uid,
+          channel.id,
+          latestMessage.id
+        );
       }
     }
   };
@@ -1174,7 +1172,7 @@ const MainPage: React.FC = () => {
       const latestMessage = channelMessages[channelMessages.length - 1];
       updateLastSeen(
         auth.currentUser.uid,
-        selectedChannel,
+        selectedChannel.id,
         latestMessage.id
       ).catch((error) => console.error("Error updating last seen:", error));
     }
@@ -1956,7 +1954,7 @@ const MainPage: React.FC = () => {
           workspaceId={workspaceId || ""}
           selectedChannel={selectedChannel}
           usersCache={usersCache}
-          messages={messages}
+          messages={allMessages}
           onDeleteChannel={handleDeleteChannel}
         />
       </div>

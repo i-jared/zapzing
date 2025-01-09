@@ -8,7 +8,6 @@ export const initializeUserData = async (user: User): Promise<void> => {
   try {
     const fcmToken = await getFCMToken();
     const userRef = doc(db, 'users', user.uid);
-    console.log("fcmToken", fcmToken);
     
     await setDoc(userRef, {
       email: user.email,

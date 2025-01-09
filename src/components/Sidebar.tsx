@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FaSearch, FaCircle, FaEllipsisV, FaPlus } from "react-icons/fa";
+import { FaEllipsisV, FaPlus } from "react-icons/fa";
 import {
   collection,
   query,
@@ -10,7 +10,6 @@ import {
   serverTimestamp,
   doc,
   getDocs,
-  limit,
   updateDoc,
   arrayUnion,
   arrayRemove,
@@ -20,7 +19,6 @@ import { db } from "../firebase";
 import { auth } from "../firebase";
 import {
   toggleDMMute,
-  isDMMuted,
   toggleChannelMute,
   hasUnseenMessages,
 } from "../utils/chat";
@@ -55,7 +53,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   selectedChannel,
   usersCache,
   messages,
-  onDeleteChannel,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -239,6 +236,8 @@ const Sidebar: React.FC<SidebarProps> = ({
         );
       });
 
+      console.log("existingDM", existingDM?.id);
+
       if (existingDM) {
         // Use existing DM channel
         const data = existingDM.data();
@@ -314,11 +313,6 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (!selectedMemberForBlock || !auth.currentUser) return;
 
     try {
-      // Add your blocking logic here
-      console.log(
-        `Blocking user ${selectedMemberForBlock.email} with report: ${shouldReport}`
-      );
-
       // Example implementation:
       const userRef = doc(db, "users", auth.currentUser.uid);
       await updateDoc(userRef, {
@@ -422,7 +416,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                 }}
                 className={`${
                   selectedChannel?.id === channel.id
-                    ? "bg-base-300"
+                    ? "bg-base-300 border-2 border-primary"
+                    : hasUnseenMessages(channel, messages, currentUserData)
+                    ? "bg-accent text-accent-content hover:bg-accent/70 animate-pulse"
                     : "bg-base-100"
                 } w-full hover:bg-base-200 px-4 py-2 flex`}
               >
@@ -534,10 +530,23 @@ const Sidebar: React.FC<SidebarProps> = ({
             <div key={member.uid} className="flex items-center px-0 py-1">
               <button
                 onClick={() => {
+                  console.log(currentUserData);
                   handleCreateDM(member);
                   closeDrawer();
                 }}
-                className={`hover:bg-base-200 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left bg-base-100`}
+                className={`${
+                  hasUnseenMessages(
+                    channels.find(
+                      (channel) =>
+                        channel.dm?.includes(member.uid) &&
+                        channel.dm?.includes(auth.currentUser?.uid ?? "")
+                    ),
+                    messages,
+                    currentUserData
+                  )
+                    ? "bg-accent text-accent-content hover:bg-accent/70 animate-pulse"
+                    : "bg-base-100"
+                } hover:bg-base-200 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left`}
               >
                 <div className="flex justify-between items-center">
                   <div
