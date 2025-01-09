@@ -112,7 +112,8 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
       }
 
       // 5) Build the notification payload.
-      const payload = {
+      const message = {
+        tokens,
         notification: {
           title: sender.displayName || "New Message",
           body: messageText,
@@ -130,10 +131,7 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
       };
 
       // 6) Send notifications to all collected tokens via FCM.
-      const response = await getMessaging().sendEachForMulticast(
-        tokens,
-        payload
-      );
+      const response = await getMessaging().sendEachForMulticast(message);
       console.log("FCM response:", response);
 
       return null;
