@@ -1,8 +1,29 @@
 import { User, updateProfile, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendEmailVerification } from 'firebase/auth';
 import { doc, setDoc, collection, query, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../firebase';
+import { db, storage, getFCMToken } from '../firebase';
 import { UserData } from '../types/chat';
+
+export const initializeUserData = async (user: User): Promise<void> => {
+  try {
+    const fcmToken = await getFCMToken();
+    const userRef = doc(db, 'users', user.uid);
+    
+    await setDoc(userRef, {
+      email: user.email,
+      displayName: user.displayName,
+      photoURL: user.photoURL,
+      fcmToken,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      blockedUsers: [],
+      mutedChannels: [],
+      mutedDMs: []
+    }, { merge: true });
+  } catch (error) {
+    console.error('Error initializing user data:', error);
+  }
+};
 
 export const handleProfileUpdate = async (
   user: User,

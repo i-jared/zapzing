@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
+import { initializeUserData } from '../utils/auth';
 
 type AuthPage = 'signin' | 'signup' | 'forgot-password';
 
@@ -22,7 +23,9 @@ const SignIn: React.FC<SignInProps> = ({ onPageChange, setLoading }) => {
     setLoading(true);
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // Initialize user data with FCM token
+      await initializeUserData(userCredential.user);
       localStorage.setItem('isAuthenticated', 'true');
       window.dispatchEvent(new Event('authChange'));
       navigate('/');

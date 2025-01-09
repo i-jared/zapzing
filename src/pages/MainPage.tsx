@@ -17,7 +17,8 @@ import {
   FaAt,
 } from "react-icons/fa";
 import { signOut } from "firebase/auth";
-import { auth, db, storage } from "../firebase";
+import { auth, db, storage, messaging } from "../firebase";
+import { onMessage } from "firebase/messaging";
 import {
   collection,
   query,
@@ -129,6 +130,36 @@ const MainPage: React.FC = () => {
   const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
+
+  // Effect to request notification permission
+  useEffect(() => {
+    // Request Notification Permission (if not already granted)
+    if (Notification.permission !== "granted") {
+      Notification.requestPermission().then((permission) => {
+        if (permission === "granted") {
+          console.log("Notification permission granted.");
+        }
+      });
+    }
+    // Listen for foreground messages
+    const unsubscribe = onMessage(messaging, (payload) => {
+      // payload.notification: { title, body, ... }
+      // payload.data: { channelId, senderUid, workspaceId, ... }
+      console.log("Received foreground message: ", payload);
+
+      const { channelId } = payload.data || {};
+
+      // Only display if channelId != selectedChannel.id
+      if (channelId && channelId !== selectedChannel?.id) {
+        // Display a browser notification
+        new Notification(payload.notification?.title ?? "New Message", {
+          body: payload.notification?.body ?? "",
+          // you can also include an icon: icon: 'your-icon-url'
+        });
+      }
+    }); // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, [selectedChannel]);
 
   // Effect to apply theme
   useEffect(() => {
@@ -289,8 +320,7 @@ const MainPage: React.FC = () => {
         userActivityRef,
         {
           lastActive: serverTimestamp(),
-          email: auth.currentUser?.email,
-          displayName: auth.currentUser?.displayName,
+          uid: auth.currentUser?.uid || "",
         },
         { merge: true }
       );
@@ -382,15 +412,13 @@ const MainPage: React.FC = () => {
         channel: selectedChannel.id,
         workspaceId,
         timestamp: serverTimestamp(),
-        displayName: auth.currentUser.displayName,
-        email: auth.currentUser.email,
+        uid: auth.currentUser?.uid || "",
       }),
       setDoc(
         userActivityRef,
         {
           lastActive: serverTimestamp(),
-          email: auth.currentUser.email,
-          displayName: auth.currentUser.displayName,
+          uid: auth.currentUser?.uid || "",
         },
         { merge: true }
       ),
@@ -405,8 +433,7 @@ const MainPage: React.FC = () => {
         channel: selectedChannel.id,
         workspaceId,
         timestamp: serverTimestamp(),
-        displayName: auth.currentUser?.displayName || null,
-        email: auth.currentUser?.email || null,
+        uid: auth.currentUser?.uid || "",
       });
     }, 5000);
   }, [workspaceId, selectedChannel?.id]);
@@ -1204,17 +1231,17 @@ const MainPage: React.FC = () => {
     if (!workspaceId) return;
 
     try {
-      const workspaceRef = doc(db, 'workspaces', workspaceId);
+      const workspaceRef = doc(db, "workspaces", workspaceId);
       const workspaceDoc = await getDoc(workspaceRef);
-      
+
       if (!workspaceDoc.exists()) return;
 
       const currentInvites = workspaceDoc.data().invitedEmails || [];
       await updateDoc(workspaceRef, {
-        invitedEmails: currentInvites.filter((e: string) => e !== email)
+        invitedEmails: currentInvites.filter((e: string) => e !== email),
       });
     } catch (error) {
-      console.error('Error canceling invitation:', error);
+      console.error("Error canceling invitation:", error);
     }
   };
 
@@ -1426,8 +1453,8 @@ const MainPage: React.FC = () => {
                       </a>
                     </li>
                     <li key="sign-out">
-                      <a 
-                        onClick={handleSignOut} 
+                      <a
+                        onClick={handleSignOut}
                         className="hover:bg-base-200 active:bg-base-300 px-4 py-2 rounded-lg text-error"
                       >
                         Sign out
@@ -1578,7 +1605,7 @@ const MainPage: React.FC = () => {
               workspaceName={workspaceName}
               onSwitchWorkspace={() => navigate("/")}
               onCancelInvite={handleCancelInvite}
-              workspaceId={workspaceId || ''}
+              workspaceId={workspaceId || ""}
             />
           )}
 
