@@ -188,8 +188,8 @@ export const hasUnseenMessages = (
 
   const channelMessages = messages.filter((m) => m.channel === channelId);
   if (channelMessages.length === 0) return false;
-  if (!lastSeen) return true;
-  if (!lastSeen.timestamp) return true;
+  if (!lastSeen) return false;
+  if (!lastSeen.timestamp) return false;
 
   const lastMessage = channelMessages[channelMessages.length - 1];
   if (!lastMessage.timestamp) return false;
