@@ -410,6 +410,8 @@ const MainPage: React.FC = () => {
         workspaceId,
         timestamp: serverTimestamp(),
         uid: auth.currentUser?.uid || "",
+        displayName: auth.currentUser?.displayName || "",
+        email: auth.currentUser?.email || "",
       }),
       setDoc(
         userActivityRef,
@@ -431,6 +433,8 @@ const MainPage: React.FC = () => {
         workspaceId,
         timestamp: serverTimestamp(),
         uid: auth.currentUser?.uid || "",
+        displayName: auth.currentUser?.displayName || "",
+        email: auth.currentUser?.email || "",
       });
     }, 5000);
   }, [workspaceId, selectedChannel?.id]);
