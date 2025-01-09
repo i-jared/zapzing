@@ -117,11 +117,6 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
           title: sender.displayName || "New Message",
           body: messageText,
         },
-        webpush: {
-          fcm_options: {
-            link: "https://zappzingg.web.app",
-          },
-        },
         data: {
           channelId,
           senderUid,
@@ -130,11 +125,7 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
       };
 
       // 6) Send notifications to all collected tokens via FCM.
-      const messages = tokens.map((token) => ({
-        token,
-        ...payload,
-      }));
-      const response = await getMessaging().sendAll(messages);
+      const response = await getMessaging().sendToDevice(tokens, payload);
       console.log("FCM response:", response);
 
       return null;
