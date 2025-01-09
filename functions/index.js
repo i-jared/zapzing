@@ -130,10 +130,11 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
       };
 
       // 6) Send notifications to all collected tokens via FCM.
-      const response = await getMessaging().sendMulticast({
-        tokens,
+      const messages = tokens.map((token) => ({
+        token,
         ...payload,
-      });
+      }));
+      const response = await getMessaging().sendAll(messages);
       console.log("FCM response:", response);
 
       return null;

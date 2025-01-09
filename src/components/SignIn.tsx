@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, AuthError } from 'firebase/auth';
 import { auth } from '../firebase';
 import { initializeUserData } from '../utils/auth';
 
@@ -17,6 +17,25 @@ const SignIn: React.FC<SignInProps> = ({ onPageChange, setLoading }) => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  const getErrorMessage = (error: AuthError) => {
+    switch (error.code) {
+      case 'auth/invalid-email':
+        return 'Invalid email address format';
+      case 'auth/user-disabled':
+        return 'This account has been disabled';
+      case 'auth/user-not-found':
+        return 'No account found with this email';
+      case 'auth/wrong-password':
+        return 'Incorrect password';
+      case 'auth/invalid-credential':
+        return 'Invalid email or password';
+      case 'auth/too-many-requests':
+        return 'Too many failed attempts. Please try again later';
+      default:
+        return error.message || 'Failed to sign in';
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -24,14 +43,13 @@ const SignIn: React.FC<SignInProps> = ({ onPageChange, setLoading }) => {
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      // Initialize user data with FCM token
       await initializeUserData(userCredential.user);
       localStorage.setItem('isAuthenticated', 'true');
       window.dispatchEvent(new Event('authChange'));
       navigate('/');
     } catch (error: any) {
       console.error('Error signing in:', error);
-      setError(error.message || 'Failed to sign in');
+      setError(getErrorMessage(error));
       setLoading(false);
     }
   };
