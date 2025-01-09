@@ -83,9 +83,9 @@ export const toggleChannelMute = async (userUid: string, channelId: string): Pro
   }
 };
 
-export const isDMMuted = (userUid: string, dmEmail: string, usersCache: Record<string, UserData>): boolean => {
+export const isDMMuted = (userUid: string, dmUid: string, usersCache: Record<string, UserData>): boolean => {
   const userData = usersCache[userUid];
-  return userData?.mutedDMs?.includes(dmEmail) || false;
+  return userData?.mutedDMs?.includes(dmUid) || false;
 };
 
 export const isChannelMuted = (userUid: string, channelName: string, usersCache: Record<string, UserData>): boolean => {

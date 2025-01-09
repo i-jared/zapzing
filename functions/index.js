@@ -17,7 +17,7 @@
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
-const { admin } = require("firebase-admin"); // For using FieldPath.documentId()
+const admin = require("firebase-admin");
 
 admin.initializeApp();
 
@@ -35,6 +35,8 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
         console.log("No message data found");
         return null;
       }
+
+      console.log("messageData", messageData);
 
       // 1) Extract relevant fields from the newly created message.
       const channelId = messageData.channel;
@@ -68,6 +70,8 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
 
       const workspaceData = workspaceDoc.data();
       const members = workspaceData.members;
+
+      console.log("members", members);
 
       // 3) Query all users in that workspace.
       const usersSnapshot = await getFirestore()

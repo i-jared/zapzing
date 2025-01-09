@@ -318,7 +318,6 @@ const MainPage: React.FC = () => {
         userActivityRef,
         {
           lastActive: serverTimestamp(),
-          uid: auth.currentUser?.uid || "",
         },
         { merge: true }
       );

@@ -14,6 +14,7 @@ import {
   updateDoc,
   arrayUnion,
   arrayRemove,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { auth } from "../firebase";
@@ -93,33 +94,23 @@ const Sidebar: React.FC<SidebarProps> = ({
     const unsubscribe = onSnapshot(workspaceRef, async (workspaceDoc) => {
       if (!workspaceDoc.exists()) return;
 
-      const memberEmails = workspaceDoc.data().members || [];
+      const memberUids = workspaceDoc.data().members || [];
 
-      // First get all user documents to avoid flashing
-      const userDocs = await Promise.all(
-        memberEmails.map(async (email: string) => {
-          const usersQuery = query(
-            collection(db, "users"),
-            where("email", "==", email),
-            limit(1)
-          );
-          return getDocs(usersQuery);
+      // Fetch user data for each member using their UIDs
+      const members = await Promise.all(
+        memberUids.map(async (uid: string) => {
+          const userRef = doc(db, "users", uid);
+          const userDoc = await getDoc(userRef);
+          const userData = userDoc.data() as UserData | undefined;
+          
+          return {
+            uid,
+            email: userData?.email || "",
+            displayName: userData?.displayName || null,
+            photoURL: userData?.photoURL || null,
+          };
         })
       );
-
-      const members = memberEmails.map((email: string, index: number) => {
-        const userSnapshot = userDocs[index];
-        if (!userSnapshot.empty) {
-          const userData = userSnapshot.docs[0].data();
-          return {
-            email,
-            displayName: userData.displayName,
-            photoURL: userData.photoURL,
-            uid: userSnapshot.docs[0].id,
-          };
-        }
-        return { email };
-      });
 
       setWorkspaceMembers(members);
     });
@@ -177,7 +168,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
     // Create a real-time query for active users
     const unsubscribe = onSnapshot(query(userActivityRef), (snapshot) => {
-      const activeUserEmails = new Set<string>();
+      const activeUserIds = new Set<string>();
 
       snapshot.docs.forEach((doc) => {
         const data = doc.data();
@@ -185,11 +176,11 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         // Check if user was active in the last 10 minutes
         if (lastActive && lastActive > tenMinutesAgo) {
-          activeUserEmails.add(data.email);
+          activeUserIds.add(doc.id);
         }
       });
 
-      setActiveUsers(activeUserEmails);
+      setActiveUsers(activeUserIds);
     });
 
     return () => unsubscribe();
@@ -558,7 +549,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                       {!currentUserData?.blockedUsers?.includes(member.uid) && (
                         <span
                           className={`indicator-item badge badge-xs ${
-                            activeUsers.has(member.email)
+                            activeUsers.has(member.uid)
                               ? "badge-success"
                               : "badge-neutral opacity-40"
                           }`}
@@ -578,7 +569,11 @@ const Sidebar: React.FC<SidebarProps> = ({
                         )
                           ? "font-bold"
                           : ""
-                      } ${currentUserData?.blockedUsers?.includes(member.uid) ? "line-through" : ""}`}
+                      } ${
+                        currentUserData?.blockedUsers?.includes(member.uid)
+                          ? "line-through"
+                          : ""
+                      }`}
                     >
                       {member.displayName || member.email}
                     </span>
