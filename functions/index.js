@@ -14,15 +14,21 @@
 //   logger.info("Hello logs!", {structuredData: true});
 //   response.send("Hello from Firebase!");
 // });
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
 
-exports.sendNotificationOnMessageCreate = functions.firestore
-  .document("message/{messageId}")
-  .onCreate(async (snapshot, context) => {
+exports.sendNotificationOnMessageCreate = onDocumentCreated(
+  "message/{messageId}",
+  async (event) => {
     try {
+      const snapshot = event.data;
+      if (!snapshot) {
+        console.log("No snapshot data found");
+        return null;
+      }
       const messageData = snapshot.data();
       if (!messageData) {
         console.log("No message data found");
@@ -111,5 +117,5 @@ exports.sendNotificationOnMessageCreate = functions.firestore
       console.error("Error sending FCM notification:", error);
       return null;
     }
-  });
-
+  }
+);
