@@ -51,7 +51,11 @@ const MessageText: React.FC<MessageTextProps> = ({ text }) => {
   matches.forEach((match) => {
     // Add text before the match
     if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index));
+      parts.push(
+        <span key={`text-${match.index}`} className="break-words break-all">
+          {text.slice(lastIndex, match.index)}
+        </span>
+      );
     }
 
     if (match.type === 'url') {
@@ -63,7 +67,7 @@ const MessageText: React.FC<MessageTextProps> = ({ text }) => {
           href={fullUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-primary hover:underline"
+          className="text-primary hover:underline break-all"
         >
           {url}
         </a>
@@ -72,7 +76,7 @@ const MessageText: React.FC<MessageTextProps> = ({ text }) => {
       parts.push(
         <span
           key={match.index}
-          className="bg-accent text-accent-content"
+          className="bg-accent text-accent-content break-all"
         >
           @{match.content}
         </span>
@@ -84,10 +88,14 @@ const MessageText: React.FC<MessageTextProps> = ({ text }) => {
 
   // Add remaining text
   if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
+    parts.push(
+      <span key={`text-${lastIndex}`} className="break-words break-all">
+        {text.slice(lastIndex)}
+      </span>
+    );
   }
 
-  return <>{parts}</>;
+  return <div className="whitespace-pre-wrap break-words">{parts}</div>;
 };
 
 export default MessageText; 

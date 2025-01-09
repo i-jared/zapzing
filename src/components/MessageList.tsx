@@ -116,6 +116,10 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
         className={`z-0 p-4 min-h-full ${
           isThread ? "" : "flex flex-col-reverse overflow-y-auto"
         } relative ${isThread ? "thread-messages" : "main-messages"}`}
+        style={{
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
       >
         {/* Base solid background - can be any color or gradient */}
         {!isThread ? (
@@ -178,12 +182,12 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
               </div>
             </div>
           ) : (
-            <div className="flex flex-col">
+            <div className="flex flex-col pb-8">
               {messages.map((msg, index, filteredMessages) => (
                 <div
                   key={msg.id}
                   id={`message-${msg.id}`}
-                  className={`flex pl-4 pt-2 group relative hover:bg-base-300/30 rounded-lg transition-all ${
+                  className={`flex pl-4 py-1 group relative hover:bg-base-300/30 rounded-lg transition-all ${
                     msg.id === replyingToId
                       ? "bg-primary/5 shadow-[0_0_0_1px_hsl(var(--p))] before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:bg-primary before:rounded-l-lg"
                       : ""
