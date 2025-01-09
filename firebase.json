@@ -7,15 +7,15 @@
     "public": "dist",
     "rewrites": [
       {
+        "source": "/firebase-messaging-sw.js",
+        "destination": "/firebase-messaging-sw.js"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
     ],
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ]
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
   },
   "storage": {
     "rules": "storage.rules"
