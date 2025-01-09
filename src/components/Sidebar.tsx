@@ -213,7 +213,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const handleCreateDM = async (member: WorkspaceMember) => {
     if (!auth.currentUser || !workspaceId || !member.uid) return;
     if (selectedChannel) {
-      onChannelSelect(selectedChannel);
+      await onChannelSelect(selectedChannel);
     }
 
     try {
