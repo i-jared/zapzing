@@ -17,6 +17,7 @@
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
+const { FieldPath } = require("firebase/firestore"); // For using FieldPath.documentId()
 const { initializeApp } = require("firebase-admin/app");
 
 initializeApp();
@@ -56,10 +57,23 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
       const channelData = channelDoc.data();
       const workspaceId = channelData.workspaceId;
 
+      const workspaceDoc = await getFirestore()
+        .collection("workspaces")
+        .doc(workspaceId)
+        .get();
+
+      if (!workspaceDoc.exists) {
+        console.log(`Workspace ${workspaceId} does not exist`);
+        return null;
+      }
+
+      const workspaceData = workspaceDoc.data();
+      const members = workspaceData.members;
+
       // 3) Query all users in that workspace.
       const usersSnapshot = await getFirestore()
         .collection("users")
-        .where("workspaceId", "==", workspaceId)
+        .where(FieldPath.documentId(), "in", members)
         .get();
 
       if (usersSnapshot.empty) {

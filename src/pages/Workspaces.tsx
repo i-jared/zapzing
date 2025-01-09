@@ -82,8 +82,8 @@ const Workspaces: React.FC = () => {
       const workspacesRef = collection(db, "workspaces");
       const newWorkspace = await addDoc(workspacesRef, {
         name: newWorkspaceName.trim(),
-        createdBy: auth.currentUser.email,
-        members: [auth.currentUser.email],
+        createdBy: auth.currentUser.uid,
+        members: [auth.currentUser.uid],
         invitedEmails: [],
         createdAt: serverTimestamp(),
       });
@@ -127,7 +127,8 @@ const Workspaces: React.FC = () => {
 
       const workspaceData = workspaceSnap.data() as Workspace;
 
-      if (workspaceData.members.includes(currentUser.email)) {
+      // Check if user is already a member by UID
+      if (workspaceData.members.includes(currentUser.uid)) {
         navigate(`/workspace/${workspaceId}`);
         return;
       }
@@ -151,9 +152,9 @@ const Workspaces: React.FC = () => {
         return;
       }
 
-      // Add user to workspace members
+      // Add user to workspace members using UID
       await updateDoc(workspaceRef, {
-        members: arrayUnion(currentUser.email),
+        members: arrayUnion(currentUser.uid),
         invitedEmails: workspaceData.invitedEmails.filter(
           (email) => email !== currentUser.email
         ),

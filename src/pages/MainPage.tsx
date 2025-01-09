@@ -1176,25 +1176,21 @@ const MainPage: React.FC = () => {
 
     // Fetch channel members
     const workspaceRef = doc(db, "workspaces", workspaceId);
-    const unsubscribe = onSnapshot(workspaceRef, async (doc) => {
-      if (doc.exists()) {
-        const workspaceData = doc.data();
-        const allMembers = workspaceData.members || [];
+    const unsubscribe = onSnapshot(workspaceRef, async (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const workspaceData = docSnapshot.data();
+        const memberUids = workspaceData.members || [];
 
         // Fetch user data for each member
-        const memberPromises = allMembers.map(async (memberEmail: string) => {
-          const usersQuery = query(
-            collection(db, "users"),
-            where("email", "==", memberEmail),
-            limit(1)
-          );
-          const userSnapshot = await getDocs(usersQuery);
-          const userData = userSnapshot.docs[0]?.data();
+        const memberPromises = memberUids.map(async (uid: string) => {
+          const userRef = doc(db, "users", uid);
+          const userDoc = await getDoc(userRef);
+          const userData = userDoc.data() as UserData | undefined;
 
           return {
-            uid: userSnapshot.docs[0]?.id || memberEmail,
-            email: memberEmail,
-            isCurrentUser: memberEmail === auth.currentUser?.email,
+            uid,
+            email: userData?.email || "",
+            isCurrentUser: uid === auth.currentUser?.uid,
             displayName: userData?.displayName || null,
             photoURL: userData?.photoURL || null,
           };
@@ -1206,7 +1202,7 @@ const MainPage: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, [workspaceId, selectedChannel?.id, auth.currentUser?.email]);
+  }, [workspaceId, selectedChannel?.id, auth.currentUser?.uid]);
 
   const handleDeleteChannel = async (channelId: string) => {
     try {
