@@ -236,8 +236,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         );
       });
 
-      console.log("existingDM", existingDM?.id);
-
       if (existingDM) {
         // Use existing DM channel
         const data = existingDM.data();

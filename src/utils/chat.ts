@@ -163,7 +163,6 @@ export const updateLastSeen = async (
   channelId: string,
   messageId: string
 ): Promise<void> => {
-  console.log("updateLastSeen", userUid, channelId, messageId);
   const userRef = doc(db, "users", userUid);
 
   await updateDoc(userRef, {
