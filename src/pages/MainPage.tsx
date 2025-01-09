@@ -1808,7 +1808,24 @@ const MainPage: React.FC = () => {
                 </p>
               ) : (
                 mentions.map(({ message, mentionedName }) => (
-                  <div key={message.id} className="bg-base-100 p-4 rounded-lg">
+                  <div 
+                    key={message.id} 
+                    className="bg-base-100 p-4 rounded-lg cursor-pointer hover:bg-base-200"
+                    onClick={async () => {
+                      // Close the modal
+                      const modal = document.getElementById(
+                        "mentions-modal"
+                      ) as HTMLDialogElement;
+                      if (modal) modal.close();
+
+                      // Use the same navigation logic as search results
+                      await handleSearchResultClick({
+                        message,
+                        preview: message.text,
+                        context: message.replyTo ? "(in thread)" : "",
+                      });
+                    }}
+                  >
                     <div className="flex items-center gap-2 mb-2">
                       <div className="avatar placeholder">
                         <div className="bg-neutral text-neutral-content rounded-full w-8">
