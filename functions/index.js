@@ -14,12 +14,19 @@
 //   logger.info("Hello logs!", {structuredData: true});
 //   response.send("Hello from Firebase!");
 // });
-const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const {
+  onDocumentCreated,
+  onDocumentUpdated,
+} = require("firebase-functions/v2/firestore");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const admin = require("firebase-admin");
+const sgMail = require("@sendgrid/mail");
 
 admin.initializeApp();
+
+// Basic regex to validate email format
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 exports.sendNotificationOnMessageCreate = onDocumentCreated(
   "messages/{messageId}",
@@ -163,5 +170,78 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
       console.error("Error sending FCM notification:", error);
       return null;
     }
+  }
+);
+
+/**
+ * Firestore Trigger: onInvitedEmailsUpdate
+ * Triggered when a document in 'workspaces/{uid}' is updated.
+ * Looks for newly added emails in `invitedEmails` array.
+ */
+exports.onInvitedEmailsUpdate7 = onDocumentUpdated(
+  "workspaces/{uid}",
+  async (event) => {
+    try {
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+      const beforeData = event.data.before.data() || {};
+      const afterData = event.data.after.data() || {};
+
+      const beforeInvites = beforeData.invitedEmails || [];
+      const afterInvites = afterData.invitedEmails || [];
+
+      // Find any newly added emails (present in afterInvites but not in beforeInvites)
+      const newlyAddedEmails = afterInvites.filter(
+        (email) => !beforeInvites.includes(email)
+      );
+
+      if (!newlyAddedEmails.length) {
+        console.log("No new invites added.");
+        return null;
+      }
+
+      const workspaceUid = event.params.uid; // The doc ID in 'workspaces/{uid}'
+      console.log(
+        `Newly invited emails for workspace UID [${workspaceUid}]:`,
+        newlyAddedEmails
+      );
+
+      // Send an invitation email for each new invite
+      const sendEmailPromises = newlyAddedEmails.map(async (inviteeEmail) => {
+        // Validate email format
+        try {
+          if (!emailRegex.test(inviteeEmail)) {
+            console.warn(`Invalid email skipped: ${inviteeEmail}`);
+            return null;
+          }
+
+          // Construct your email message
+          const msg = {
+            to: inviteeEmail,
+            from: "jared.lambert@gauntletai.com", // Replace with your verified sender
+            subject: "You've been invited to join a workspace on Zapzing!",
+            text: `Sign up at https://zappzingg.web.app and use this workspace code: ${workspaceUid}`,
+            html: `
+          <p>You've been invited to join a workspace on <strong>Zapzing</strong>!</p>
+          <p>Sign up at <a href="https://zappzingg.web.app">https://zappzingg.web.app</a> and use this workspace code:</p>
+          <h3>${workspaceUid}</h3>
+          <p>Thanks,<br>The Zapzing Team</p>
+        `,
+          };
+
+          await sgMail.send(msg);
+          console.log(`Email sent successfully to: ${inviteeEmail}`);
+        } catch (error) {
+          console.error(`Error sending email to ${inviteeEmail}:`, error);
+        }
+      });
+
+      // Wait for all emails to be processed
+      await Promise.all(sendEmailPromises);
+    } catch (error) {
+      console.error("Error sending emails:", error);
+      return null;
+    }
+
+    return null;
   }
 );

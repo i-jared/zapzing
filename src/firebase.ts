@@ -29,8 +29,8 @@ export const storage = getStorage(app);
 export const messaging = getMessaging(app);
 
 // Add additional Firebase service exports here as needed
+// Add additional Firebase service exports here as needed
 // Example: export const auth = getAuth(app);
-
 // Function to get FCM token
 export const getFCMToken = async () => {
   try {
