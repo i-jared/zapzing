@@ -417,7 +417,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 className={`${
                   selectedChannel?.id === channel.id
                     ? "bg-base-300 border-2 border-primary"
-                    : hasUnseenMessages(channel, messages, currentUserData)
+                    : hasUnseenMessages(channel, messages, currentUserData, selectedChannel?.id)
                     ? "bg-accent text-accent-content hover:bg-accent/70 animate-pulse"
                     : "bg-base-100"
                 } w-full hover:bg-base-200 px-4 py-2 flex`}
@@ -433,7 +433,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     <span className="text-sm">#</span>
                     <span
                       className={`text-sm ${
-                        hasUnseenMessages(channel, messages, currentUserData)
+                        hasUnseenMessages(channel, messages, currentUserData, selectedChannel?.id)
                           ? "font-bold"
                           : ""
                       }`}
@@ -542,7 +542,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                         channel.dm?.includes(auth.currentUser?.uid ?? "")
                     ),
                     messages,
-                    currentUserData
+                    currentUserData,
+                    selectedChannel?.id
                   )
                     ? "bg-accent text-accent-content hover:bg-accent/70 animate-pulse"
                     : "bg-base-100"
@@ -588,7 +589,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                             hasUnseenMessages(
                               channel,
                               messages,
-                              currentUserData
+                              currentUserData,
+                              selectedChannel?.id
                             )
                         )
                           ? "font-bold"

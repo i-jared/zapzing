@@ -177,10 +177,12 @@ export const updateLastSeen = async (
 export const hasUnseenMessages = (
   channel: Channel | undefined,
   messages: Message[],
-  userData: UserData | null
+  userData: UserData | null,
+  selectedChannelId?: string
 ): boolean => {
   if (!userData?.lastSeen) return false;
   if (!channel) return false;
+  if (channel.id === selectedChannelId) return false;
 
   const channelId = channel.id;
   const lastSeen = userData.lastSeen[channelId];

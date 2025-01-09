@@ -1035,9 +1035,7 @@ const MainPage: React.FC = () => {
   }, [messages, selectedChannel, selectedThread]); // Re-run when messages, channel, or thread changes
 
   const handleChannelSelect = async (channel: Channel) => {
-    setSelectedChannel(channel);
-
-    // Update last seen when selecting a channel
+    // Update last seen before changing the channel
     if (auth.currentUser) {
       const channelMessages = messages.filter((m) => m.channel === channel.id);
       if (channelMessages.length > 0) {
@@ -1049,6 +1047,9 @@ const MainPage: React.FC = () => {
         );
       }
     }
+    
+    // Only set the selected channel after lastSeen is updated
+    setSelectedChannel(channel);
   };
 
   // Update search result handling
