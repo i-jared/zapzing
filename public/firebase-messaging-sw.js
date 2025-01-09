@@ -1,0 +1,1 @@
+// this is the firebase messaging service worker
