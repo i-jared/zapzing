@@ -101,6 +101,11 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
           title: sender.displayName || "New Message",
           body: messageText,
         },
+        webpush: {
+          fcm_options: {
+            link: "https://zappzingg.web.app",
+          },
+        },
         data: {
           channelId,
           senderUid,
