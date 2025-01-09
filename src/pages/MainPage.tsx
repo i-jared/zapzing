@@ -17,7 +17,7 @@ import {
   FaAt,
 } from "react-icons/fa";
 import { signOut } from "firebase/auth";
-import { auth, db, storage, messaging } from "../firebase";
+import { auth, db, storage, messaging, getFCMToken } from "../firebase";
 import { onMessage } from "firebase/messaging";
 import {
   collection,
@@ -131,43 +131,65 @@ const MainPage: React.FC = () => {
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
-  // Effect to request notification permission
+  // Effect to request notification permission and set up FCM
   useEffect(() => {
-    // Request Notification Permission (if not already granted)
-    console.log(
-      "Requesting notification permission: ",
-      Notification.permission
-    );
-    if (Notification.permission !== "granted") {
-      Notification.requestPermission().then((permission) => {
-        console.log("Notification permission: ", permission);
-      });
-    }
-    // Listen for foreground messages
-    const unsubscribe = onMessage(messaging, (payload) => {
-      console.log("Received foreground message: ", payload);
-      const { channelId } = payload.data || {};
+    const setupFCM = async () => {
+      try {
+        // Request notification permission first
+        const permission = await Notification.requestPermission();
+        console.log("Notification permission:", permission);
 
-      // Only display if channelId != selectedChannel.id
-      if (
-        Notification.permission === "granted" &&
-        channelId &&
-        channelId !== selectedChannel?.id
-      ) {
-        // Display a browser notification
-        new Notification(payload.notification?.title ?? "New Message", {
-          body: payload.notification?.body ?? "",
-          icon: "/assets/logo_light.png",
-        });
-        // Play notification sound
-        const audio = new Audio("/assets/notif-sound.wav");
-        audio.play().catch((error) => {
-          console.log("Error playing notification sound:", error);
-        });
+        if (permission === "granted") {
+          // Get FCM token
+          const token = await getFCMToken();
+          if (token) {
+            console.log("FCM Token:", token);
+            // Here you could save the token to your user's document in Firestore
+            if (auth.currentUser) {
+              const userRef = doc(db, "users", auth.currentUser.uid);
+              await updateDoc(userRef, {
+                fcmToken: token,
+              });
+            }
+          }
+
+          // Listen for foreground messages
+          const unsubscribe = onMessage(messaging, (payload) => {
+            console.log("Received foreground message:", payload);
+            const { channelId } = payload.data || {};
+
+            // Only display if channelId != selectedChannel.id
+            if (channelId && channelId !== selectedChannel?.id) {
+              // Display a browser notification
+              new Notification(payload.notification?.title ?? "New Message", {
+                body: payload.notification?.body ?? "",
+                icon: "/assets/logo_light.png",
+              });
+
+              // Play notification sound
+              const audio = new Audio("/assets/notif-sound.wav");
+              audio.play().catch((error) => {
+                console.log("Error playing notification sound:", error);
+              });
+            }
+          });
+
+          return unsubscribe;
+        }
+      } catch (error) {
+        console.error("Error setting up FCM:", error);
       }
-    }); // Cleanup subscription on unmount
-    return () => unsubscribe();
-  }, [selectedChannel]);
+    };
+
+    const unsubscribePromise = setupFCM();
+
+    // Cleanup subscription on unmount
+    return () => {
+      unsubscribePromise.then((unsubscribe) => {
+        if (unsubscribe) unsubscribe();
+      });
+    };
+  }, [selectedChannel, auth.currentUser]);
 
   // Effect to apply theme
   useEffect(() => {

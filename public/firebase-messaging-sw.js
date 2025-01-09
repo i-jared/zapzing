@@ -20,27 +20,18 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// // Retrieve an instance of Firebase Messaging so that it can handle background
-// // messages.
+// Handle background messages
+messaging.onBackgroundMessage((payload) => {
+  console.log(
+    "[firebase-messaging-sw.js] Received background message ",
+    payload
+  );
+  
+  const notificationTitle = payload.notification?.title || "New Message";
+  const notificationOptions = {
+    body: payload.notification?.body || "",
+    icon: "/assets/logo_light.png",
+  };
 
-// messaging.onBackgroundMessage(messaging, (payload) => {
-//   console.log(
-//     "[firebase-messaging-sw.js] Received background message ",
-//     payload
-//   );
-//   //   // Customize notification here
-//   //   const notificationTitle = payload.notification.title || "Zapzing!";
-//   //   const notificationOptions = {
-//   //     body: payload.notification.body || "New message",
-//   //     icon: "/assets/favicon.png",
-//   //   };
-
-//   //   self.registration.showNotification(notificationTitle, notificationOptions);
-// });
-
-messaging.onMessage((payload) => {
-  const audio = new Audio("/assets/notif-sound.wav");
-  audio.play().catch((error) => {
-    console.log("Error playing notification sound:", error);
-  });
+  self.registration.showNotification(notificationTitle, notificationOptions);
 });

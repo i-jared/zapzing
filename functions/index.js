@@ -56,13 +56,16 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
       }
 
       const channelData = channelDoc.data();
+      // Prepare a list of FCM tokens from users who are eligible to receive the notification.
+      const tokens = [];
+      const workspaceId = channelData.workspaceId;
 
       if (channelData.dm) {
         console.log("DM channel");
 
         const userId = channelData.dm.find(
           (member) => member.uid !== senderUid
-        ).uid;
+        );
 
         const userDoc = await getFirestore()
           .collection("users")
@@ -78,8 +81,6 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
           tokens.push(fcmToken);
         }
       } else {
-        const workspaceId = channelData.workspaceId;
-
         const workspaceDoc = await getFirestore()
           .collection("workspaces")
           .doc(workspaceId)
@@ -107,9 +108,6 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
           console.log(`No users found for workspaceId: ${workspaceId}`);
           return null;
         }
-
-        // Prepare a list of FCM tokens from users who are eligible to receive the notification.
-        const tokens = [];
 
         // 4) Filter out users who have either muted the channel or blocked the sender.
         usersSnapshot.forEach((userDoc) => {
