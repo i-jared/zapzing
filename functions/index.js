@@ -69,8 +69,12 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
           .doc(userId)
           .get();
         const userData = userDoc.data();
-        const { fcmToken } = userData;
-        if (fcmToken) {
+        const { fcmToken, blockedUsers = [], mutedChannels = [] } = userData;
+        if (
+          fcmToken &&
+          !blockedUsers.includes(senderUid) &&
+          !mutedChannels.includes(channelId)
+        ) {
           tokens.push(fcmToken);
         }
       } else {
