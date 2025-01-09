@@ -68,9 +68,12 @@ const Sidebar: React.FC<SidebarProps> = ({
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
   const [activeUsers, setActiveUsers] = useState<Set<string>>(new Set());
   const [currentUserData, setCurrentUserData] = useState<UserData | null>(null);
-  const [selectedMemberForProfile, setSelectedMemberForProfile] = useState<WorkspaceMember | null>(null);
-  const [selectedMemberForBlock, setSelectedMemberForBlock] = useState<WorkspaceMember | null>(null);
-  const [selectedMemberForUnblock, setSelectedMemberForUnblock] = useState<WorkspaceMember | null>(null);
+  const [selectedMemberForProfile, setSelectedMemberForProfile] =
+    useState<WorkspaceMember | null>(null);
+  const [selectedMemberForBlock, setSelectedMemberForBlock] =
+    useState<WorkspaceMember | null>(null);
+  const [selectedMemberForUnblock, setSelectedMemberForUnblock] =
+    useState<WorkspaceMember | null>(null);
 
   // Add effect to listen for current user's data changes
   useEffect(() => {
@@ -102,7 +105,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           const userRef = doc(db, "users", uid);
           const userDoc = await getDoc(userRef);
           const userData = userDoc.data() as UserData | undefined;
-          
+
           return {
             uid,
             email: userData?.email || "",
@@ -274,19 +277,23 @@ const Sidebar: React.FC<SidebarProps> = ({
     .filter(
       (member) =>
         member.uid !== auth.currentUser?.uid &&
-        !usersCache[member.uid]?.blockedUsers?.includes(auth.currentUser?.uid || '') &&
+        !usersCache[member.uid]?.blockedUsers?.includes(
+          auth.currentUser?.uid || ""
+        ) &&
         (
           member.displayName?.toLowerCase() || member.email.toLowerCase()
         ).includes(searchTerm.toLowerCase())
     )
     .sort((a, b) => {
-      const isABlocked = currentUserData?.blockedUsers?.includes(a.uid) || false;
-      const isBBlocked = currentUserData?.blockedUsers?.includes(b.uid) || false;
-      
+      const isABlocked =
+        currentUserData?.blockedUsers?.includes(a.uid) || false;
+      const isBBlocked =
+        currentUserData?.blockedUsers?.includes(b.uid) || false;
+
       // If one is blocked and the other isn't, put blocked at the bottom
       if (isABlocked && !isBBlocked) return 1;
       if (!isABlocked && isBBlocked) return -1;
-      
+
       // If both are blocked or both are not blocked, sort by name
       return (a.displayName || a.email).localeCompare(b.displayName || b.email);
     });
@@ -297,7 +304,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   // Add helper function to close drawer
   const closeDrawer = () => {
-    const drawer = document.getElementById('main-drawer') as HTMLInputElement;
+    const drawer = document.getElementById("main-drawer") as HTMLInputElement;
     if (drawer) {
       drawer.checked = false;
     }
@@ -308,12 +315,14 @@ const Sidebar: React.FC<SidebarProps> = ({
 
     try {
       // Add your blocking logic here
-      console.log(`Blocking user ${selectedMemberForBlock.email} with report: ${shouldReport}`);
-      
+      console.log(
+        `Blocking user ${selectedMemberForBlock.email} with report: ${shouldReport}`
+      );
+
       // Example implementation:
       const userRef = doc(db, "users", auth.currentUser.uid);
       await updateDoc(userRef, {
-        blockedUsers: arrayUnion(selectedMemberForBlock.uid)
+        blockedUsers: arrayUnion(selectedMemberForBlock.uid),
       });
 
       if (shouldReport) {
@@ -323,7 +332,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           reportedUser: selectedMemberForBlock.uid,
           reportedBy: auth.currentUser.uid,
           timestamp: serverTimestamp(),
-          type: "user_block"
+          type: "user_block",
         });
       }
 
@@ -339,7 +348,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     try {
       const userRef = doc(db, "users", auth.currentUser.uid);
       await updateDoc(userRef, {
-        blockedUsers: arrayRemove(selectedMemberForUnblock.uid)
+        blockedUsers: arrayRemove(selectedMemberForUnblock.uid),
       });
 
       setSelectedMemberForUnblock(null);
@@ -402,6 +411,12 @@ const Sidebar: React.FC<SidebarProps> = ({
             <li className="flex items-center px-0 py-1" key={channel.id}>
               <button
                 onClick={() => {
+                  if (
+                    Notification.permission !== "granted" &&
+                    Notification.permission !== "denied"
+                  ) {
+                    Notification.requestPermission();
+                  }
                   onChannelSelect(channel);
                   closeDrawer();
                 }}
@@ -603,7 +618,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 "unblock-user-modal"
                               ) as HTMLDialogElement;
                               if (modal) modal.showModal();
-                              (e.currentTarget.closest("ul") as HTMLElement)?.blur();
+                              (
+                                e.currentTarget.closest("ul") as HTMLElement
+                              )?.blur();
                             }}
                           >
                             Unblock User
@@ -620,7 +637,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                                   "view-profile-modal"
                                 ) as HTMLDialogElement;
                                 if (modal) modal.showModal();
-                                (e.currentTarget.closest("ul") as HTMLElement)?.blur();
+                                (
+                                  e.currentTarget.closest("ul") as HTMLElement
+                                )?.blur();
                               }}
                             >
                               View Profile
@@ -632,7 +651,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 e.stopPropagation();
                                 if (!auth.currentUser) return;
                                 toggleDMMute(auth.currentUser.uid, member.uid);
-                                (e.currentTarget.closest("ul") as HTMLElement)?.blur();
+                                (
+                                  e.currentTarget.closest("ul") as HTMLElement
+                                )?.blur();
                               }}
                             >
                               {currentUserData?.mutedDMs?.includes(member.uid)
@@ -650,7 +671,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                                   "block-user-modal"
                                 ) as HTMLDialogElement;
                                 if (modal) modal.showModal();
-                                (e.currentTarget.closest("ul") as HTMLElement)?.blur();
+                                (
+                                  e.currentTarget.closest("ul") as HTMLElement
+                                )?.blur();
                               }}
                               className="text-error"
                             >

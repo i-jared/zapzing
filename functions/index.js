@@ -60,7 +60,7 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
       if (channelData.dm) {
         console.log("DM channel");
 
-        const userId = channelData.members.find(
+        const userId = channelData.dm.find(
           (member) => member.uid !== senderUid
         ).uid;
 

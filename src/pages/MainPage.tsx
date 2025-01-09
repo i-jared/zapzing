@@ -134,7 +134,10 @@ const MainPage: React.FC = () => {
   // Effect to request notification permission
   useEffect(() => {
     // Request Notification Permission (if not already granted)
-    console.log("Requesting notification permission: ", Notification.permission);
+    console.log(
+      "Requesting notification permission: ",
+      Notification.permission
+    );
     if (Notification.permission !== "granted") {
       Notification.requestPermission().then((permission) => {
         console.log("Notification permission: ", permission);
@@ -142,18 +145,24 @@ const MainPage: React.FC = () => {
     }
     // Listen for foreground messages
     const unsubscribe = onMessage(messaging, (payload) => {
-      // payload.notification: { title, body, ... }
-      // payload.data: { channelId, senderUid, workspaceId, ... }
       console.log("Received foreground message: ", payload);
-
       const { channelId } = payload.data || {};
 
       // Only display if channelId != selectedChannel.id
-      if (channelId && channelId !== selectedChannel?.id) {
+      if (
+        Notification.permission === "granted" &&
+        channelId &&
+        channelId !== selectedChannel?.id
+      ) {
         // Display a browser notification
         new Notification(payload.notification?.title ?? "New Message", {
           body: payload.notification?.body ?? "",
           icon: "/assets/logo_light.png",
+        });
+        // Play notification sound
+        const audio = new Audio("/assets/notif-sound.wav");
+        audio.play().catch((error) => {
+          console.log("Error playing notification sound:", error);
         });
       }
     }); // Cleanup subscription on unmount
@@ -1392,7 +1401,9 @@ const MainPage: React.FC = () => {
 
               <div className="flex-none gap-2">
                 <button
-                  className={`btn btn-ghost btn-circle text-base-content ${isRightSidebarOpen ? 'btn-active bg-base-300' : ''}`}
+                  className={`btn btn-ghost btn-circle text-base-content ${
+                    isRightSidebarOpen ? "btn-active bg-base-300" : ""
+                  }`}
                   onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
                   disabled={!isEmailVerified}
                   title={
@@ -1809,8 +1820,8 @@ const MainPage: React.FC = () => {
                 </p>
               ) : (
                 mentions.map(({ message, mentionedName }) => (
-                  <div 
-                    key={message.id} 
+                  <div
+                    key={message.id}
                     className="bg-base-100 p-4 rounded-lg cursor-pointer hover:bg-base-200"
                     onClick={async () => {
                       // Close the modal
