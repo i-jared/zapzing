@@ -134,13 +134,20 @@ const MessageInput: React.FC<MessageInputProps> = ({
     const lastAtIndex = newValue.lastIndexOf('@');
     
     if (lastAtIndex !== -1) {
-      // Get the text after the @ symbol
-      const searchText = newValue.slice(lastAtIndex + 1);
+      // Get the text after the @ symbol up to the next space or end of string
+      const textAfterAt = newValue.slice(lastAtIndex + 1);
+      const searchText = textAfterAt.split(' ')[0];
       
-      // Only show popup if @ is preceded by a space or is at the start
-      // AND the next character isn't a space
+      // Only show popup if:
+      // 1. @ is preceded by a space or is at the start
+      // 2. There's no space after the search text
+      // 3. We're still at the same @ mention (cursor position check)
       if ((lastAtIndex === 0 || newValue[lastAtIndex - 1] === ' ') && 
-          !searchText.startsWith(' ')) {
+          !searchText.includes(' ') && 
+          inputRef.current?.selectionStart && 
+          inputRef.current.selectionStart > lastAtIndex && 
+          inputRef.current.selectionStart <= lastAtIndex + searchText.length + 1) {
+        
         setMentionSearchText(searchText);
         setShowMentionPopup(true);
         
@@ -155,7 +162,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
           });
         }
       } else {
-        setShowMentionPopup(false);  // Hide popup if there's a space after @
+        setShowMentionPopup(false);  // Hide popup if conditions aren't met
       }
     } else {
       setShowMentionPopup(false);
