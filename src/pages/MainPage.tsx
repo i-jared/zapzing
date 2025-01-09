@@ -128,6 +128,7 @@ const MainPage: React.FC = () => {
   const threadMessagesEndRef = useRef<HTMLDivElement>(null);
   const mainMessageListRef = useRef<MessageListRef>(null);
   const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
+  const rightSidebarRef = useRef<HTMLDivElement>(null);
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
@@ -1242,6 +1243,26 @@ const MainPage: React.FC = () => {
     }
   };
 
+  // Add effect for click outside handling
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      // Get the toggle button element
+      const toggleButton = document.querySelector('[data-workspace-sidebar-toggle]');
+      
+      if (isRightSidebarOpen && 
+          rightSidebarRef.current && 
+          !rightSidebarRef.current.contains(event.target as Node) &&
+          event.target !== toggleButton) {
+        setIsRightSidebarOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isRightSidebarOpen]);
+
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
@@ -1393,6 +1414,7 @@ const MainPage: React.FC = () => {
                 <button
                   className="btn btn-ghost btn-circle text-base-content"
                   onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
+                  data-workspace-sidebar-toggle
                   disabled={!isEmailVerified}
                   title={
                     !isEmailVerified
@@ -1585,25 +1607,27 @@ const MainPage: React.FC = () => {
 
           {/* Right Sidebar */}
           {isRightSidebarOpen && (
-            <WorkspaceSidebar
-              isEmailVerified={isEmailVerified}
-              channelMembers={channelMembers}
-              invitedUsers={invitedUsers}
-              isInvitedUsersExpanded={isInvitedUsersExpanded}
-              onInviteClick={() => {
-                const modal = document.getElementById(
-                  "invite-modal"
-                ) as HTMLDialogElement;
-                if (modal) modal.showModal();
-              }}
-              onToggleInvitedUsers={() =>
-                setIsInvitedUsersExpanded(!isInvitedUsersExpanded)
-              }
-              workspaceName={workspaceName}
-              onSwitchWorkspace={() => navigate("/")}
-              onCancelInvite={handleCancelInvite}
-              workspaceId={workspaceId || ""}
-            />
+            <div ref={rightSidebarRef}>
+              <WorkspaceSidebar
+                isEmailVerified={isEmailVerified}
+                channelMembers={channelMembers}
+                invitedUsers={invitedUsers}
+                isInvitedUsersExpanded={isInvitedUsersExpanded}
+                onInviteClick={() => {
+                  const modal = document.getElementById(
+                    "invite-modal"
+                  ) as HTMLDialogElement;
+                  if (modal) modal.showModal();
+                }}
+                onToggleInvitedUsers={() =>
+                  setIsInvitedUsersExpanded(!isInvitedUsersExpanded)
+                }
+                workspaceName={workspaceName}
+                onSwitchWorkspace={() => navigate("/")}
+                onCancelInvite={handleCancelInvite}
+                workspaceId={workspaceId || ""}
+              />
+            </div>
           )}
 
           {/* Thread Drawer */}
