@@ -69,7 +69,9 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
       }
 
       const workspaceData = workspaceDoc.data();
-      const members = workspaceData.members;
+      const members = workspaceData.members.filter(
+        (member) => member.uid !== senderUid
+      );
 
       console.log("members", members);
 

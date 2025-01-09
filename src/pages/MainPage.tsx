@@ -134,6 +134,7 @@ const MainPage: React.FC = () => {
   // Effect to request notification permission
   useEffect(() => {
     // Request Notification Permission (if not already granted)
+    console.log("Requesting notification permission: ", Notification.permission);
     if (Notification.permission !== "granted") {
       Notification.requestPermission().then((permission) => {
         console.log("Notification permission: ", permission);
