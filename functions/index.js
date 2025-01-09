@@ -15,13 +15,14 @@
 //   response.send("Hello from Firebase!");
 // });
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
-const functions = require("firebase-functions");
-const admin = require("firebase-admin");
+const { getFirestore } = require("firebase-admin/firestore");
+const { getMessaging } = require("firebase-admin/messaging");
+const { initializeApp } = require("firebase-admin/app");
 
-admin.initializeApp();
+initializeApp();
 
 exports.sendNotificationOnMessageCreate = onDocumentCreated(
-  "message/{messageId}",
+  "messages/{messageId}",
   async (event) => {
     try {
       const snapshot = event.data;
@@ -42,8 +43,7 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
       const messageText = messageData.text;
 
       // 2) Get the channel document to retrieve the workspaceId.
-      const channelDoc = await admin
-        .firestore()
+      const channelDoc = await getFirestore()
         .collection("channels")
         .doc(channelId)
         .get();
@@ -57,8 +57,7 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
       const workspaceId = channelData.workspaceId;
 
       // 3) Query all users in that workspace.
-      const usersSnapshot = await admin
-        .firestore()
+      const usersSnapshot = await getFirestore()
         .collection("users")
         .where("workspaceId", "==", workspaceId)
         .get();
@@ -114,7 +113,7 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
       };
 
       // 6) Send notifications to all collected tokens via FCM.
-      const response = await admin.messaging().sendToDevice(tokens, payload);
+      const response = await getMessaging().sendToDevice(tokens, payload);
       console.log("FCM response:", response);
 
       return null;

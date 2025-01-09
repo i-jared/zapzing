@@ -136,9 +136,7 @@ const MainPage: React.FC = () => {
     // Request Notification Permission (if not already granted)
     if (Notification.permission !== "granted") {
       Notification.requestPermission().then((permission) => {
-        if (permission === "granted") {
-          console.log("Notification permission granted.");
-        }
+        console.log("Notification permission: ", permission);
       });
     }
     // Listen for foreground messages
@@ -154,7 +152,7 @@ const MainPage: React.FC = () => {
         // Display a browser notification
         new Notification(payload.notification?.title ?? "New Message", {
           body: payload.notification?.body ?? "",
-          // you can also include an icon: icon: 'your-icon-url'
+          icon: "/assets/logo_light.png",
         });
       }
     }); // Cleanup subscription on unmount
