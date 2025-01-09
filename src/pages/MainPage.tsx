@@ -159,12 +159,16 @@ const MainPage: React.FC = () => {
             const { channelId } = payload.data || {};
 
             // Only display if channelId != selectedChannel.id
+            console.log("channelId ", channelId, " selectedChannel?.id ", selectedChannel?.id);
             if (channelId && channelId !== selectedChannel?.id) {
+            // if (true) {
               // Display a browser notification
               new Notification(payload.notification?.title ?? "New Message", {
                 body: payload.notification?.body ?? "",
                 icon: "/assets/logo_light.png",
               });
+
+              console.log("Playing notification sound");
 
               // Play notification sound
               const audio = new Audio("/assets/notif-sound.wav");
