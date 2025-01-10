@@ -37,7 +37,6 @@ import SearchResultsView from "../components/SearchResultsView";
 import MentionsModal from "../components/MentionsModal";
 import LinksModal from "../components/LinksModal";
 import FilesModal from "../components/FilesModal";
-import DesktopSearchBar from "../components/DesktopSearchBar";
 import ThreadView from "../components/ThreadView";
 import { MessageListRef } from "../components/MessageList";
 
@@ -1322,6 +1321,7 @@ const MainPage: React.FC = () => {
         <MainHeader
           selectedChannel={selectedChannel}
           searchQuery={searchQuery}
+          searchResults={searchResults}
           isMobileSearchActive={isMobileSearchActive}
           onSearchChange={handleSearch}
           onCancelSearch={() => {
@@ -1329,27 +1329,23 @@ const MainPage: React.FC = () => {
             setIsMobileSearchActive(false);
           }}
           onToggleMobileSearch={() => setIsMobileSearchActive(true)}
+          onProfileClick={() => {
+            const modal = document.getElementById("profile-modal") as HTMLDialogElement;
+            if (modal) modal.showModal();
+          }}
+          onAccountClick={() => {
+            const modal = document.getElementById("account-modal") as HTMLDialogElement;
+            if (modal) modal.showModal();
+          }}
+          onSignOut={handleSignOut}
+          onSearchResultClick={handleSearchResultClick}
+          onToggleWorkspaceSidebar={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
         />
 
         {/* Main Content with Right Sidebar */}
         <div className="flex flex-1 overflow-hidden">
           {/* Messages Area */}
           <div className="flex-1 relative flex flex-col">
-            {/* Search Results */}
-            {searchQuery && (
-              <SearchResultsView
-                searchResults={searchResults}
-                searchQuery={searchQuery}
-                getUserDisplayName={getUserDisplayName}
-                formatTime={formatTime}
-                onResultClick={(message) => handleSearchResultClick({
-                  message,
-                  preview: "",
-                  context: ""
-                })}
-              />
-            )}
-
             {/* Main Message Area */}
             <MainMessageArea
               messages={messages.filter(
@@ -1379,14 +1375,6 @@ const MainPage: React.FC = () => {
               onSendMessage={handleSendMessage}
               onCancelReply={handleCancelReply}
             />
-
-            {/* Desktop Search Bar */}
-            <div className="absolute top-4 right-4 w-64">
-              <DesktopSearchBar
-                searchQuery={searchQuery}
-                onSearchChange={handleSearch}
-              />
-            </div>
           </div>
 
           {/* Right Sidebar */}
