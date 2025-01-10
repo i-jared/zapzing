@@ -202,10 +202,13 @@ const MainPage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!workspaceId || !auth.currentUser?.email) {
+    if (!workspaceId) {
       navigate("/");
       return;
     }
+
+    // Only set initial channel if no channel is selected
+    if (selectedChannel) return;
 
     // Set initial channel to 'general'
     const channelsRef = collection(db, "channels");
@@ -235,7 +238,7 @@ const MainPage: React.FC = () => {
     });
 
     return () => {};
-  }, [workspaceId, navigate, auth.currentUser?.email]);
+  }, [workspaceId, navigate, selectedChannel]);
 
   useEffect(() => {
     if (!workspaceId) return;
