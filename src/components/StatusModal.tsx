@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -9,6 +9,18 @@ interface StatusModalProps {
 
 const StatusModal: React.FC<StatusModalProps> = ({ userId, currentStatus }) => {
   const [status, setStatus] = useState(currentStatus || '');
+
+  useEffect(() => {
+    const modal = document.getElementById('status-modal') as HTMLDialogElement;
+    if (!modal) return;
+
+    const handleClose = () => {
+      setStatus(currentStatus || '');
+    };
+
+    modal.addEventListener('close', handleClose);
+    return () => modal.removeEventListener('close', handleClose);
+  }, [currentStatus]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -36,6 +36,7 @@ interface WorkspaceMember {
   photoURL?: string | null;
   isActive?: boolean;
   uid: string;
+  status: string | null;
 }
 
 interface SidebarProps {
@@ -108,6 +109,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             email: userData?.email || "",
             displayName: userData?.displayName || null,
             photoURL: userData?.photoURL || null,
+            status: userData?.status || null
           };
         })
       );

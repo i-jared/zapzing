@@ -18,7 +18,8 @@ export const initializeUserData = async (user: User): Promise<void> => {
       updatedAt: serverTimestamp(),
       blockedUsers: [],
       mutedChannels: [],
-      mutedDMs: []
+      mutedDMs: [],
+      status: null
     }, { merge: true });
   } catch (error) {
     console.error('Error initializing user data:', error);
@@ -60,6 +61,7 @@ export const handleProfileUpdate = async (
   setUsersCache(prev => ({
     ...prev,
     [user.uid]: {
+      ...prev[user.uid],
       email: user.email ?? '',
       displayName: displayName.trim() || null,
       photoURL
