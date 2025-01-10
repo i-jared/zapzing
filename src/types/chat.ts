@@ -6,29 +6,63 @@ export interface Reaction {
 export interface Message {
   id: string;
   text: string;
-  sender: {
-    uid: string;
-    email: string;
-    displayName?: string;
-    photoURL?: string;
-  };
+  senderUid: string;
   timestamp: Date;
   channel: string;
   workspaceId: string;
-  reactions?: { [key: string]: { emoji: string; users: string[] } };
+  reactions?: { [key: string]: string[] };
   attachment?: {
-    type: 'file' | 'video' | 'drawing';
     url: string;
+    type: string;
     name: string;
-    size: number;
+    size?: number;
     contentType?: string;
-  };
+  } | null;
   replyTo?: {
     messageId: string;
     threadId: string;
-    senderName: string;
-  };
+    senderUid: string;
+  } | null;
   replyCount?: number;
+  // For backward compatibility during migration
+  _sender?: {
+    uid: string;
+    email: string;
+    displayName: string | null;
+    photoURL: string | null;
+  } | null;
+  // For backward compatibility during migration
+  sender?: {
+    uid: string;
+    email: string;
+    displayName?: string | null;
+    photoURL?: string | null;
+  };
+}
+
+export interface NormalizedUserData {
+  uid: string;
+  email: string;
+  displayName: string | null;
+  photoURL: string | null;
+  blockedUsers: string[];
+  mutedChannels: string[];
+  mutedDMs: string[];
+  fcmToken?: string;
+}
+
+export interface NormalizedWorkspace {
+  id: string;
+  name: string;
+  createdBy: string;
+  members: string[];
+  pendingInvites: {
+    uid: string;
+    email: string;
+    invitedBy: string;
+    timestamp: Date;
+  }[];
+  createdAt: Date;
 }
 
 export interface UserData {

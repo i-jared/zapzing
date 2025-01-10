@@ -1,57 +1,34 @@
 import React from 'react';
-import { FaSearch, FaFile, FaExternalLinkAlt, FaDownload, FaFileImage, FaFilePdf, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileAlt } from 'react-icons/fa';
+import { FaSearch, FaFile, FaExternalLinkAlt, FaDownload } from 'react-icons/fa';
+import { Message } from '../types/chat';
 
 interface FileListModalProps {
-  messages: Array<{
-    id: string;
-    sender: {
-      uid: string;
-      email: string;
-      displayName?: string;
-    };
-    timestamp: Date;
-    attachment?: {
-      type: 'file' | 'video' | 'drawing';
-      url: string;
-      name: string;
-      size: number;
-      contentType?: string;
-    };
-  }>;
+  messages: Message[];
   fileSearchQuery: string;
   onSearchChange: (query: string) => void;
   getUserDisplayName: (uid: string, email: string, displayName?: string) => string;
+  formatFileSize: (bytes: number) => string;
+  getFileIcon: (fileName: string, contentType?: string) => React.ComponentType;
 }
-
-// Helper function to get file icon
-const getFileIcon = (fileName: string, contentType?: string) => {
-  if (contentType?.startsWith('image/')) return FaFileImage;
-  if (contentType?.includes('pdf')) return FaFilePdf;
-  if (contentType?.includes('word') || fileName.endsWith('.doc') || fileName.endsWith('.docx')) return FaFileWord;
-  if (contentType?.includes('excel') || fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) return FaFileExcel;
-  if (contentType?.includes('powerpoint') || fileName.endsWith('.ppt') || fileName.endsWith('.pptx')) return FaFilePowerpoint;
-  return FaFileAlt;
-};
-
-// Helper function to format file size
-const formatFileSize = (bytes: number) => {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-};
 
 const FileListModal: React.FC<FileListModalProps> = ({
   messages,
   fileSearchQuery,
   onSearchChange,
-  getUserDisplayName
+  getUserDisplayName,
+  formatFileSize,
+  getFileIcon
 }) => {
   const filteredMessages = messages.filter(m => {
     if (!fileSearchQuery) return true;
     const searchLower = fileSearchQuery.toLowerCase();
     const fileName = m.attachment?.name.toLowerCase() || '';
     const fileType = m.attachment?.contentType?.toLowerCase() || '';
-    const sharedBy = getUserDisplayName(m.sender.uid, m.sender.email, m.sender.displayName).toLowerCase();
+    const sharedBy = getUserDisplayName(
+      m.senderUid,
+      m._sender?.email || '',
+      m._sender?.displayName || undefined
+    ).toLowerCase();
     const date = m.timestamp.toLocaleDateString().toLowerCase();
     return fileName.includes(searchLower) || 
            fileType.includes(searchLower) || 
@@ -142,7 +119,11 @@ const FileListModal: React.FC<FileListModalProps> = ({
                     </div>
                   )}
                   <div className="text-xs text-base-content/70 mt-2">
-                    Shared by {getUserDisplayName(msg.sender.uid, msg.sender.email, msg.sender.displayName)} on {msg.timestamp.toLocaleDateString()}
+                    Shared by {getUserDisplayName(
+                      msg.senderUid,
+                      msg._sender?.email || '',
+                      msg._sender?.displayName || undefined
+                    )} on {msg.timestamp.toLocaleDateString()}
                   </div>
                 </div>
               </div>
@@ -180,6 +161,6 @@ const FileListModal: React.FC<FileListModalProps> = ({
       </form>
     </dialog>
   );
-};
+}
 
 export default FileListModal; 

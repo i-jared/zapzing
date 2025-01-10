@@ -22,6 +22,7 @@ const { getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const admin = require("firebase-admin");
 const sgMail = require("@sendgrid/mail");
+const functions = require("firebase-functions");
 
 admin.initializeApp();
 
@@ -45,13 +46,12 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
 
       console.log("messageData", messageData);
 
-      // 1) Extract relevant fields from the newly created message.
+      // Extract relevant fields from the newly created message
       const channelId = messageData.channel;
-      const sender = messageData.sender; // { displayName, email, photoURL, uid }
-      const senderUid = sender.uid;
+      const senderUid = messageData.senderUid;
       const messageText = messageData.text;
 
-      // 2) Get the channel document to retrieve the workspaceId.
+      // Get the channel document to retrieve the workspaceId
       const channelDoc = await getFirestore()
         .collection("channels")
         .doc(channelId)
@@ -63,32 +63,44 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
       }
 
       const channelData = channelDoc.data();
-      // Prepare a list of FCM tokens from users who are eligible to receive the notification.
       const tokens = [];
       const workspaceId = channelData.workspaceId;
 
+      // Get sender's data for notification
+      const senderDoc = await getFirestore()
+        .collection("users")
+        .doc(senderUid)
+        .get();
+      
+      if (!senderDoc.exists) {
+        console.log(`Sender ${senderUid} not found`);
+        return null;
+      }
+
+      const senderData = senderDoc.data();
+
       if (channelData.dm) {
         console.log("DM channel");
+        // For DM channels, find the other user's UID
+        const recipientUid = channelData.dm.find(uid => uid !== senderUid);
 
-        const userId = channelData.dm.find(
-          (member) => member.uid !== senderUid
-        );
+        if (recipientUid) {
+          const userDoc = await getFirestore()
+            .collection("users")
+            .doc(recipientUid)
+            .get();
+          
+          if (userDoc.exists) {
+            const userData = userDoc.data();
+            const { fcmToken, blockedUsers = [], mutedDMs = [] } = userData;
 
-        const userDoc = await getFirestore()
-          .collection("users")
-          .doc(userId)
-          .get();
-        const userData = userDoc.data();
-        const { fcmToken, blockedUsers = [], mutedDMs = [] } = userData;
-
-        if (
-          fcmToken &&
-          !blockedUsers.includes(senderUid) &&
-          !mutedDMs.includes(channelId)
-        ) {
-          tokens.push(fcmToken);
+            if (fcmToken && !blockedUsers.includes(senderUid) && !mutedDMs.includes(channelId)) {
+              tokens.push(fcmToken);
+            }
+          }
         }
       } else {
+        // For regular channels
         const workspaceDoc = await getFirestore()
           .collection("workspaces")
           .doc(workspaceId)
@@ -100,41 +112,32 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
         }
 
         const workspaceData = workspaceDoc.data();
-        const members = workspaceData.members.filter(
-          (member) => member.uid !== senderUid
-        );
+        const memberUids = workspaceData.members.filter(uid => uid !== senderUid);
 
-        console.log("members", members);
+        console.log("members", memberUids);
 
-        // 3) Query all users in that workspace.
-        const usersSnapshot = await getFirestore()
-          .collection("users")
-          .where(admin.firestore.FieldPath.documentId(), "in", members)
-          .get();
+        if (memberUids.length > 0) {
+          // Query all users in that workspace
+          const usersSnapshot = await getFirestore()
+            .collection("users")
+            .where(admin.firestore.FieldPath.documentId(), "in", memberUids)
+            .get();
 
-        if (usersSnapshot.empty) {
-          console.log(`No users found for workspaceId: ${workspaceId}`);
-          return null;
+          usersSnapshot.forEach(userDoc => {
+            const userData = userDoc.data();
+            const { blockedUsers = [], mutedChannels = [], fcmToken } = userData;
+
+            // Skip if user has blocked the sender or muted the channel
+            if (blockedUsers.includes(senderUid) || mutedChannels.includes(channelId)) {
+              return;
+            }
+
+            // Collect the token if it exists
+            if (fcmToken) {
+              tokens.push(fcmToken);
+            }
+          });
         }
-
-        // 4) Filter out users who have either muted the channel or blocked the sender.
-        usersSnapshot.forEach((userDoc) => {
-          const userData = userDoc.data();
-          const { blockedUsers = [], mutedChannels = [], fcmToken } = userData;
-
-          // Skip if user has blocked the sender or muted the channel.
-          if (
-            blockedUsers.includes(senderUid) ||
-            mutedChannels.includes(channelId)
-          ) {
-            return; // do not add token
-          }
-
-          // Collect the token if it exists.
-          if (fcmToken) {
-            tokens.push(fcmToken);
-          }
-        });
       }
 
       if (tokens.length === 0) {
@@ -142,11 +145,11 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
         return null;
       }
 
-      // 5) Build the notification payload.
+      // Build the notification payload
       const message = {
         tokens,
         notification: {
-          title: sender.displayName || "New Message",
+          title: senderData.displayName || "New Message",
           body: messageText,
         },
         webpush: {
@@ -161,7 +164,7 @@ exports.sendNotificationOnMessageCreate = onDocumentCreated(
         },
       };
 
-      // 6) Send notifications to all collected tokens via FCM.
+      // Send notifications to all collected tokens via FCM
       const response = await getMessaging().sendEachForMulticast(message);
       console.log("FCM response:", response);
 
@@ -245,3 +248,109 @@ exports.onInvitedEmailsUpdate7 = onDocumentUpdated(
     return null;
   }
 );
+
+exports.onMessageCreated = functions.firestore
+  .document("messages/{messageId}")
+  .onCreate(async (event) => {
+    try {
+      const snapshot = event.data;
+      if (!snapshot) {
+        console.log("No snapshot data found");
+        return null;
+      }
+      const messageData = snapshot.data();
+      if (!messageData) {
+        console.log("No message data found");
+        return null;
+      }
+
+      console.log("messageData", messageData);
+
+      // Extract relevant fields from the newly created message
+      const channelId = messageData.channel;
+      const senderUid = messageData.senderUid;  // Now using senderUid directly
+      const messageText = messageData.text;
+
+      // Get the channel document to retrieve the workspaceId
+      const channelDoc = await getFirestore()
+        .collection("channels")
+        .doc(channelId)
+        .get();
+
+      if (!channelDoc.exists) {
+        console.log(`Channel ${channelId} does not exist`);
+        return null;
+      }
+
+      const channelData = channelDoc.data();
+      const tokens = [];
+      const workspaceId = channelData.workspaceId;
+
+      if (channelData.dm) {
+        console.log("DM channel");
+        // For DM channels, find the other user's UID
+        const recipientUid = channelData.dm.find(uid => uid !== senderUid);
+
+        if (recipientUid) {
+          const userDoc = await getFirestore()
+            .collection("users")
+            .doc(recipientUid)
+            .get();
+          
+          if (userDoc.exists) {
+            const userData = userDoc.data();
+            const { fcmToken, blockedUsers = [], mutedDMs = [] } = userData;
+
+            if (fcmToken && !blockedUsers.includes(senderUid) && !mutedDMs.includes(channelId)) {
+              tokens.push(fcmToken);
+            }
+          }
+        }
+      } else {
+        // For regular channels
+        const workspaceDoc = await getFirestore()
+          .collection("workspaces")
+          .doc(workspaceId)
+          .get();
+
+        if (!workspaceDoc.exists) {
+          console.log(`Workspace ${workspaceId} does not exist`);
+          return null;
+        }
+
+        const workspaceData = workspaceDoc.data();
+        const memberUids = workspaceData.members.filter(uid => uid !== senderUid);
+
+        console.log("members", memberUids);
+
+        if (memberUids.length > 0) {
+          // Query all users in that workspace
+          const usersSnapshot = await getFirestore()
+            .collection("users")
+            .where(admin.firestore.FieldPath.documentId(), "in", memberUids)
+            .get();
+
+          usersSnapshot.forEach(userDoc => {
+            const userData = userDoc.data();
+            const { blockedUsers = [], mutedChannels = [], fcmToken } = userData;
+
+            // Skip if user has blocked the sender or muted the channel
+            if (blockedUsers.includes(senderUid) || mutedChannels.includes(channelId)) {
+              return;
+            }
+
+            // Collect the token if it exists
+            if (fcmToken) {
+              tokens.push(fcmToken);
+            }
+          });
+        }
+      }
+
+      // Send notifications using the collected tokens
+      // ... rest of the notification sending logic ...
+    } catch (error) {
+      console.error("Error in onMessageCreated:", error);
+      return null;
+    }
+  });

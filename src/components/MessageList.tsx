@@ -16,34 +16,7 @@ import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
 import MessageText from "./MessageText";
 import { auth } from "../firebase";
-
-interface Message {
-  id: string;
-  text: string;
-  sender: {
-    uid: string;
-    email: string;
-    displayName?: string;
-    photoURL?: string;
-  };
-  timestamp: Date;
-  channel: string;
-  workspaceId: string;
-  reactions?: { [key: string]: { emoji: string; users: string[] } };
-  attachment?: {
-    type: "file" | "video" | "drawing";
-    url: string;
-    name: string;
-    size: number;
-    contentType?: string;
-  };
-  replyTo?: {
-    messageId: string;
-    threadId: string;
-    senderName: string;
-  };
-  replyCount?: number;
-}
+import { Message } from "../types/chat";
 
 interface MessageListProps {
   messages: Message[];
@@ -197,15 +170,15 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
                     {shouldShowHeader(msg, index, filteredMessages) && (
                       <div className="avatar">
                         {getUserPhotoURL(
-                          msg.sender.uid,
-                          msg.sender.photoURL
+                          msg.senderUid,
+                          msg._sender?.photoURL || undefined
                         ) ? (
                           <div className="w-10 rounded-full">
                             <img
                               src={
                                 getUserPhotoURL(
-                                  msg.sender.uid,
-                                  msg.sender.photoURL
+                                  msg.senderUid,
+                                  msg._sender?.photoURL || undefined
                                 ) || ""
                               }
                               alt="Profile"
@@ -226,15 +199,15 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
                       <div className="flex items-baseline mb-1">
                         <span
                           className={`font-bold ${
-                            msg.sender.uid === auth.currentUser?.uid
+                            msg.senderUid === auth.currentUser?.uid
                               ? "text-primary"
                               : "text-secondary"
                           }`}
                         >
                           {getUserDisplayName(
-                            msg.sender.uid,
-                            msg.sender.email,
-                            msg.sender.displayName
+                            msg.senderUid,
+                            msg._sender?.email || "",
+                            msg._sender?.displayName || undefined
                           )}
                         </span>
                         <time className="text-xs opacity-50 ml-2 text-base-content/50">
@@ -281,7 +254,7 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
                                   </div>
                                   <div className="mt-1 text-sm opacity-70">
                                     {msg.attachment.name} •{" "}
-                                    {formatFileSize(msg.attachment.size)}
+                                    {formatFileSize(msg.attachment.size || 0)}
                                   </div>
                                 </div>
                               ) : (
@@ -291,17 +264,17 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
                                     <div className="text-4xl opacity-70">
                                       {React.createElement(
                                         getFileIcon(
-                                          msg.attachment.name,
-                                          msg.attachment.contentType
+                                          msg.attachment?.name || "",
+                                          msg.attachment?.contentType
                                         )
                                       )}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <div className="font-medium truncate">
-                                        {msg.attachment.name}
+                                        {msg.attachment?.name}
                                       </div>
                                       <div className="text-sm opacity-70">
-                                        {formatFileSize(msg.attachment.size)}
+                                        {formatFileSize(msg.attachment?.size || 0)}
                                       </div>
                                     </div>
                                     <div className="join opacity-0 group-hover:opacity-100 transition-opacity">
@@ -416,11 +389,11 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
                         Object.keys(msg.reactions).length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {Object.entries(msg.reactions).map(
-                              ([emoji, reaction]) => (
+                              ([emoji, users]) => (
                                 <button
                                   key={emoji}
                                   className={`btn btn-ghost !min-h-7 !h-auto py-0.5 gap-1 px-2 flex items-center justify-center ${
-                                    reaction.users.includes(msg.sender.uid)
+                                    users.includes(msg.senderUid)
                                       ? "bg-base-300 hover:bg-base-400"
                                       : ""
                                   }`}
@@ -432,7 +405,7 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
                                     {emoji}
                                   </span>
                                   <span className="text-xs leading-none">
-                                    {reaction.users.length}
+                                    {users.length}
                                   </span>
                                 </button>
                               )

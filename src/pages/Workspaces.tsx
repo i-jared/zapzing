@@ -12,15 +12,23 @@ import {
   getDoc,
   updateDoc,
   arrayUnion,
+  getDocs,
 } from "firebase/firestore";
 import { auth, db } from "../firebase";
+
+interface PendingInvite {
+  uid?: string;
+  email: string;
+  invitedBy: string;
+  timestamp: Date;
+}
 
 interface Workspace {
   id: string;
   name: string;
   createdBy: string;
-  members: string[];
-  invitedEmails?: string[];
+  members: string[];  // Array of user UIDs
+  pendingInvites: PendingInvite[];
   createdAt: Date;
 }
 
@@ -58,7 +66,7 @@ const Workspaces: React.FC = () => {
           name: doc.data().name,
           createdBy: doc.data().createdBy,
           members: doc.data().members,
-          invitedEmails: doc.data().invitedEmails,
+          pendingInvites: doc.data().pendingInvites,
           createdAt: doc.data().createdAt?.toDate() || new Date(),
         }));
         setWorkspaces(workspacesData);
@@ -84,7 +92,7 @@ const Workspaces: React.FC = () => {
         name: newWorkspaceName.trim(),
         createdBy: auth.currentUser.uid,
         members: [auth.currentUser.uid],
-        invitedEmails: [],
+        pendingInvites: [],
         createdAt: serverTimestamp(),
       });
 
@@ -108,6 +116,70 @@ const Workspaces: React.FC = () => {
     }
   };
 
+  const handleInviteUser = async (email: string) => {
+    if (!workspaceId || !auth.currentUser) return;
+
+    try {
+      // First check if user exists
+      const usersRef = collection(db, "users");
+      const userQuery = query(usersRef, where("email", "==", email.toLowerCase()));
+      const userSnapshot = await getDocs(userQuery);
+
+      const workspaceRef = doc(db, "workspaces", workspaceId);
+      const workspaceDoc = await getDoc(workspaceRef);
+
+      if (!workspaceDoc.exists()) {
+        console.error("Workspace not found");
+        return;
+      }
+
+      const workspaceData = workspaceDoc.data() as Workspace;
+
+      // Check if user is already invited
+      const isAlreadyInvited = workspaceData.pendingInvites?.some(
+        invite => invite.email.toLowerCase() === email.toLowerCase()
+      );
+
+      if (isAlreadyInvited) {
+        console.log("User already invited");
+        return;
+      }
+
+      if (!userSnapshot.empty) {
+        // User exists, get their UID
+        const userDoc = userSnapshot.docs[0];
+        const userUid = userDoc.id;
+
+        // Check if user is already a member
+        if (workspaceData.members.includes(userUid)) {
+          console.log("User is already a member");
+          return;
+        }
+
+        // Add pending invite with UID
+        await updateDoc(workspaceRef, {
+          pendingInvites: arrayUnion({
+            uid: userUid,
+            email: email.toLowerCase(),
+            invitedBy: auth.currentUser.uid,
+            timestamp: serverTimestamp(),
+          })
+        });
+      } else {
+        // User doesn't exist yet, store invite with email only
+        await updateDoc(workspaceRef, {
+          pendingInvites: arrayUnion({
+            email: email.toLowerCase(),
+            invitedBy: auth.currentUser.uid,
+            timestamp: serverTimestamp(),
+          })
+        });
+      }
+    } catch (error) {
+      console.error("Error inviting user:", error);
+    }
+  };
+
   const handleJoinWorkspace = async (e: React.FormEvent) => {
     e.preventDefault();
     const currentUser = auth.currentUser;
@@ -127,37 +199,29 @@ const Workspaces: React.FC = () => {
 
       const workspaceData = workspaceSnap.data() as Workspace;
 
-      // Check if user is already a member by UID
+      // Check if user is already a member
       if (workspaceData.members.includes(currentUser.uid)) {
         navigate(`/workspace/${workspaceId}`);
         return;
       }
 
-      if (
-        !workspaceData.invitedEmails?.some((emailOrPattern) => {
-          const userEmail = currentUser.email;
-          if (!userEmail) return false;
+      // Check if user has a pending invite
+      const hasInvite = workspaceData.pendingInvites?.some(invite => 
+        invite.uid === currentUser.uid || 
+        invite.email.toLowerCase() === currentUser.email?.toLowerCase()
+      );
 
-          try {
-            // Check if the entry is a valid regex pattern
-            const regex = new RegExp(emailOrPattern, "i");
-            return regex.test(userEmail);
-          } catch (e) {
-            // If it's not a valid regex, treat it as a normal email
-            return emailOrPattern.toLowerCase() === userEmail.toLowerCase();
-          }
-        })
-      ) {
+      if (!hasInvite) {
         setJoinError("You have not been invited to this workspace");
         return;
       }
 
-      // Add user to workspace members using UID
+      // Add user to workspace members and remove from pending invites
       await updateDoc(workspaceRef, {
         members: arrayUnion(currentUser.uid),
-        invitedEmails: workspaceData.invitedEmails.filter(
-          (email) => email !== currentUser.email
-        ),
+        pendingInvites: workspaceData.pendingInvites.filter(
+          invite => invite.uid !== currentUser.uid && invite.email !== currentUser.email
+        )
       });
 
       navigate(`/workspace/${workspaceId}`);

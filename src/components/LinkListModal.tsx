@@ -1,18 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FaSearch, FaLink, FaExternalLinkAlt, FaSpinner } from 'react-icons/fa';
-
-interface Message {
-  id: string;
-  text: string;
-  sender: {
-    uid: string;
-    email: string;
-    displayName?: string;
-  };
-  timestamp: Date;
-  channel: string;
-  workspaceId: string;
-}
+import { Message } from '../types/chat';
 
 interface LinkListModalProps {
   messages: Message[];
@@ -36,103 +24,108 @@ const URL_REGEX = /(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-z
 const LinkPreview: React.FC<{ url: string }> = ({ url }) => {
   const [ogData, setOgData] = useState<OpenGraphData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    const fetchOgData = async () => {
+    const fetchOGData = async () => {
       try {
         setLoading(true);
-        setError(null);
-
-        // Ensure URL has protocol
-        const urlWithProtocol = url.startsWith('http') ? url : `https://${url}`;
-        
-        // Use a proxy service to avoid CORS issues and fetch OpenGraph data
-        const response = await fetch(`https://api.microlink.io?url=${encodeURIComponent(urlWithProtocol)}`);
+        setError(false);
+        const response = await fetch(`/api/og?url=${encodeURIComponent(url)}`);
+        if (!response.ok) throw new Error('Failed to fetch OG data');
         const data = await response.json();
-
-        if (data.status === 'success') {
-          setOgData({
-            title: data.data.title,
-            description: data.data.description,
-            image: data.data.image?.url,
-            siteName: data.data.publisher,
-            url: urlWithProtocol,
-          });
-        } else {
-          setError('Failed to load preview');
-        }
+        setOgData(data);
       } catch (err) {
-        setError('Failed to load preview');
-        console.error('Error fetching OpenGraph data:', err);
+        console.error('Error fetching OG data:', err);
+        setError(true);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchOgData();
+    fetchOGData();
   }, [url]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-4 bg-base-200 rounded-lg">
-        <FaSpinner className="animate-spin text-base-content w-6 h-6" />
+      <div className="card bg-base-100">
+        <div className="card-body items-center justify-center py-8">
+          <FaSpinner className="w-6 h-6 animate-spin text-base-content/50" />
+        </div>
       </div>
     );
   }
 
   if (error || !ogData) {
     return (
-      <div className="flex items-center gap-4 p-4 bg-base-200 rounded-lg">
-        <FaLink className="text-base-content/70 w-6 h-6" />
-        <div className="flex-1 min-w-0">
-          <div className="font-medium break-all text-base-content">{url}</div>
+      <div className="card bg-base-100">
+        <div className="card-body p-4">
+          <div className="flex items-start gap-4">
+            <div className="text-3xl text-base-content/70">
+              <FaLink />
+            </div>
+            <div className="flex-1 min-w-0">
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="link link-hover font-medium truncate block"
+              >
+                {url}
+              </a>
+            </div>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-sm btn-ghost text-base-content"
+            >
+              <FaExternalLinkAlt />
+            </a>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="card bg-base-200 hover:bg-base-300 transition-colors">
-      <div className="p-4">
-        <div className="flex gap-4">
+    <div className="card bg-base-100">
+      <div className="card-body p-4">
+        <div className="flex items-start gap-4">
           {ogData.image && (
-            <div className="flex-shrink-0">
-              <img
-                src={ogData.image}
-                alt={ogData.title || 'Link preview'}
-                className="max-w-[200px] max-h-[150px] w-auto h-auto object-contain rounded-lg"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            </div>
+            <img
+              src={ogData.image}
+              alt={ogData.title || 'Link preview'}
+              className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
+            />
           )}
           <div className="flex-1 min-w-0">
-            <h3 className="font-medium text-base-content">
+            <a
+              href={ogData.url || url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="link link-hover font-medium truncate block"
+            >
               {ogData.title || url}
-            </h3>
+            </a>
             {ogData.description && (
-              <p className="text-sm text-base-content/70 mt-1 line-clamp-2">
+              <p className="text-sm text-base-content/70 line-clamp-2 mt-1">
                 {ogData.description}
               </p>
             )}
             {ogData.siteName && (
-              <p className="text-xs text-base-content/50 mt-2">
+              <div className="text-xs text-base-content/50 mt-1">
                 {ogData.siteName}
-              </p>
+              </div>
             )}
           </div>
-        </div>
-        <div className="mt-2">
           <a
-            href={ogData.url}
+            href={ogData.url || url}
             target="_blank"
             rel="noopener noreferrer"
-            className="btn btn-sm btn-ghost gap-2 text-base-content"
+            className="btn btn-sm btn-ghost text-base-content"
           >
             <FaExternalLinkAlt />
-            Open Link
           </a>
         </div>
       </div>
@@ -160,9 +153,9 @@ const LinkListModal: React.FC<LinkListModalProps> = ({
     const searchLower = linkSearchQuery.toLowerCase();
     const url = item.url.toLowerCase();
     const sharedBy = getUserDisplayName(
-      item.message.sender.uid,
-      item.message.sender.email,
-      item.message.sender.displayName
+      item.message.senderUid,
+      item.message._sender?.email || '',
+      item.message._sender?.displayName || undefined
     ).toLowerCase();
     const date = item.message.timestamp.toLocaleDateString().toLowerCase();
     return url.includes(searchLower) || 
@@ -195,9 +188,9 @@ const LinkListModal: React.FC<LinkListModalProps> = ({
                 <LinkPreview url={item.url} />
                 <div className="text-xs text-base-content/70 mt-2 px-4">
                   Shared by {getUserDisplayName(
-                    item.message.sender.uid,
-                    item.message.sender.email,
-                    item.message.sender.displayName
+                    item.message.senderUid,
+                    item.message._sender?.email || '',
+                    item.message._sender?.displayName || undefined
                   )} on {item.message.timestamp.toLocaleDateString()}
                 </div>
               </div>

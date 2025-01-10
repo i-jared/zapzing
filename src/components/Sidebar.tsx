@@ -31,11 +31,11 @@ const logoLight = "/assets/logo_light.png";
 const logoDark = "/assets/logo_dark.png";
 
 interface WorkspaceMember {
-  email: string;
-  displayName?: string | null;
-  photoURL?: string | null;
-  isActive?: boolean;
   uid: string;
+  email: string;
+  displayName: string | null;
+  photoURL: string | null;
+  isActive?: boolean;
 }
 
 interface SidebarProps {
@@ -212,15 +212,10 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const handleCreateDM = async (member: WorkspaceMember) => {
     if (!auth.currentUser || !workspaceId || !member.uid) return;
-    if (selectedChannel) {
-      await onChannelSelect(selectedChannel);
-    }
 
     try {
       // First check if DM already exists
       const channelsRef = collection(db, "channels");
-
-      // Query for DMs where either user is in the dm array
       const dmQuery = query(
         channelsRef,
         where("workspaceId", "==", workspaceId),
@@ -233,10 +228,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       const existingDM = dmSnapshot.docs.find((doc) => {
         const data = doc.data();
         const dmUsers = data.dm || [];
-        return (
-          dmUsers.includes(auth.currentUser!.uid) &&
-          dmUsers.includes(member.uid)
-        );
+        return dmUsers.includes(auth.currentUser!.uid) && dmUsers.includes(member.uid);
       });
 
       if (existingDM) {
@@ -252,15 +244,21 @@ const Sidebar: React.FC<SidebarProps> = ({
         };
         onChannelSelect(channel);
       } else {
-        // Create a temporary channel object for the UI
-        const tempChannel = {
-          id: `temp_dm_${auth.currentUser.uid}_${member.uid}`,
+        // Create new DM channel
+        const dmDoc = await addDoc(channelsRef, {
+          workspaceId,
+          createdAt: serverTimestamp(),
+          dm: [auth.currentUser.uid, member.uid],
+        });
+
+        const channel = {
+          id: dmDoc.id,
           name: member.displayName || member.email,
           workspaceId,
           createdAt: new Date(),
           dm: [auth.currentUser.uid, member.uid],
         };
-        onChannelSelect(tempChannel);
+        onChannelSelect(channel);
       }
     } catch (error) {
       console.error("Error handling DM:", error);
@@ -314,14 +312,12 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (!selectedMemberForBlock || !auth.currentUser) return;
 
     try {
-      // Example implementation:
       const userRef = doc(db, "users", auth.currentUser.uid);
       await updateDoc(userRef, {
         blockedUsers: arrayUnion(selectedMemberForBlock.uid),
       });
 
       if (shouldReport) {
-        // Add reporting logic here
         const reportsRef = collection(db, "reports");
         await addDoc(reportsRef, {
           reportedUser: selectedMemberForBlock.uid,

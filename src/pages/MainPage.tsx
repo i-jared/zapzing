@@ -250,7 +250,7 @@ const MainPage: React.FC = () => {
   }, [workspaceId]);
 
   useEffect(() => {
-    if (!workspaceId || !auth.currentUser?.email) return;
+    if (!workspaceId || !auth.currentUser?.uid) return;
 
     // Subscribe to all messages in the workspace
     const messagesRef = collection(db, "messages");
@@ -262,28 +262,39 @@ const MainPage: React.FC = () => {
 
     const unsubscribe = onSnapshot(
       allMessagesQuery,
-      (snapshot) => {
-        const messagesData = snapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            text: data.text,
-            sender: data.sender,
-            timestamp: data.timestamp?.toDate() || new Date(),
-            channel: data.channel,
-            workspaceId: data.workspaceId,
-            reactions: data.reactions || {},
-            attachment: data.attachment || null,
-            replyTo: data.replyTo || null,
-            replyCount: snapshot.docs.filter(
-              (m) => m.data().replyTo?.messageId === doc.id
-            ).length,
-          };
-        });
+      async (snapshot) => {
+        const messagesData = await Promise.all(
+          snapshot.docs.map(async (doc) => {
+            const data = doc.data();
+            // Fetch sender data from cache or Firestore
+            const senderData = usersCache[data.senderUid] || 
+              await fetchUserData(data.senderUid);
+
+            return {
+              id: doc.id,
+              text: data.text,
+              senderUid: data.senderUid,
+              timestamp: data.timestamp?.toDate() || new Date(),
+              channel: data.channel,
+              workspaceId: data.workspaceId,
+              reactions: data.reactions || {},
+              attachment: data.attachment || null,
+              replyTo: data.replyTo || null,
+              replyCount: snapshot.docs.filter(
+                (m) => m.data().replyTo?.messageId === doc.id
+              ).length,
+              _sender: senderData ? {
+                uid: data.senderUid,
+                email: senderData.email,
+                displayName: senderData.displayName,
+                photoURL: senderData.photoURL
+              } : null
+            };
+          })
+        );
 
         setAllMessages(messagesData);
 
-        // If we have a selected channel, update the filtered messages
         if (selectedChannel) {
           const channelMessages = messagesData.filter(
             (msg) => msg.channel === selectedChannel.id
@@ -300,7 +311,28 @@ const MainPage: React.FC = () => {
     );
 
     return () => unsubscribe();
-  }, [workspaceId, auth.currentUser?.email]);
+  }, [workspaceId, auth.currentUser?.uid]);
+
+  // Helper function to fetch user data
+  const fetchUserData = async (uid: string) => {
+    if (usersCache[uid]) return usersCache[uid];
+
+    try {
+      const userDoc = await getDoc(doc(db, "users", uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data() as UserData;
+        // Update cache
+        setUsersCache(prev => ({
+          ...prev,
+          [uid]: userData
+        }));
+        return userData;
+      }
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+    }
+    return null;
+  };
 
   // Update effect to set messages when channel changes
   useEffect(() => {
@@ -315,7 +347,7 @@ const MainPage: React.FC = () => {
   }, [selectedChannel, allMessages]);
 
   useEffect(() => {
-    const userIds = new Set(messages.map((msg) => msg.sender.uid));
+    const userIds = new Set(messages.map((msg) => msg.senderUid));
 
     userIds.forEach(async (uid) => {
       if (!usersCache[uid]) {
@@ -489,13 +521,7 @@ const MainPage: React.FC = () => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (
-      !message.trim() ||
-      !auth.currentUser ||
-      !workspaceId ||
-      !selectedChannel ||
-      !isEmailVerified
-    )
+    if (!message.trim() || !auth.currentUser || !workspaceId || !selectedChannel || !isEmailVerified)
       return;
 
     try {
@@ -522,12 +548,7 @@ const MainPage: React.FC = () => {
 
       const messageData = {
         text: message.trim(),
-        sender: {
-          uid: auth.currentUser.uid,
-          email: auth.currentUser.email,
-          displayName: auth.currentUser.displayName,
-          photoURL: auth.currentUser.photoURL,
-        },
+        senderUid: auth.currentUser.uid,
         timestamp: serverTimestamp(),
         channel: channelId,
         workspaceId,
@@ -536,7 +557,7 @@ const MainPage: React.FC = () => {
               replyTo: {
                 messageId: replyingTo.messageId,
                 threadId: replyingTo.messageId,
-                senderName: replyingTo.senderName,
+                senderUid: replyingTo.messageId,
               },
             }
           : {}),
@@ -604,7 +625,8 @@ const MainPage: React.FC = () => {
       const messagesRef = collection(db, "messages");
       await addDoc(messagesRef, {
         text: "",
-        sender: {
+        senderUid: auth.currentUser.uid,
+        _sender: {
           uid: auth.currentUser.uid,
           email: auth.currentUser.email,
           displayName: auth.currentUser.displayName,
@@ -754,9 +776,9 @@ const MainPage: React.FC = () => {
     }
 
     const senderName = getUserDisplayName(
-      message.sender.uid,
-      message.sender.email,
-      message.sender.displayName
+      message.senderUid,
+      message._sender?.email || "",
+      message._sender?.displayName || undefined
     );
 
     setReplyingTo({
@@ -798,17 +820,21 @@ const MainPage: React.FC = () => {
     );
 
     const unsubscribe = onSnapshot(repliesQuery, (snapshot) => {
-      const replies = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        text: doc.data().text,
-        sender: doc.data().sender,
-        timestamp: doc.data().timestamp?.toDate() || new Date(),
-        channel: doc.data().channel,
-        workspaceId: doc.data().workspaceId,
-        reactions: doc.data().reactions || {},
-        attachment: doc.data().attachment || null,
-        replyTo: doc.data().replyTo || null,
-      }));
+      const replies = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          text: data.text,
+          senderUid: data.senderUid,
+          _sender: data._sender,
+          timestamp: data.timestamp?.toDate() || new Date(),
+          channel: data.channel,
+          workspaceId: data.workspaceId,
+          reactions: data.reactions || {},
+          attachment: data.attachment || null,
+          replyTo: data.replyTo || null,
+        };
+      });
 
       setSelectedThread((current) =>
         current?.messageId === messageId
@@ -850,9 +876,9 @@ const MainPage: React.FC = () => {
     messages: Message[]
   ) => {
     return shouldShowHeader(
-      msg.sender.uid,
+      msg.senderUid,
       index,
-      messages.map((m) => m.sender.uid)
+      messages.map((m) => m.senderUid)
     );
   };
 
@@ -872,22 +898,26 @@ const MainPage: React.FC = () => {
 
   const handleThreadSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (
-      !threadMessage.trim() ||
-      !auth.currentUser ||
-      !workspaceId ||
-      !isEmailVerified ||
-      !selectedThread ||
-      !selectedChannel
-    )
+    if (!threadMessage.trim() || !auth.currentUser || !workspaceId || !isEmailVerified || !selectedThread || !selectedChannel)
       return;
 
     try {
       const messagesRef = collection(db, "messages");
+      const originalMessage = messages.find(m => m.id === selectedThread.messageId);
+      
+      if (!originalMessage) {
+        console.error("Original message not found");
+        return;
+      }
+
       const messageData = {
         text: threadMessage.trim(),
-        sender: {
+        senderUid: auth.currentUser.uid,
+        _sender: {
           uid: auth.currentUser.uid,
+          email: auth.currentUser.email,
+          displayName: auth.currentUser.displayName,
+          photoURL: auth.currentUser.photoURL,
         },
         timestamp: serverTimestamp(),
         channel: selectedChannel.id,
@@ -895,14 +925,7 @@ const MainPage: React.FC = () => {
         replyTo: {
           messageId: selectedThread.messageId,
           threadId: selectedThread.messageId,
-          senderName: getUserDisplayName(
-            messages.find((m) => m.id === selectedThread.messageId)?.sender
-              .uid || "",
-            messages.find((m) => m.id === selectedThread.messageId)?.sender
-              .email || "",
-            messages.find((m) => m.id === selectedThread.messageId)?.sender
-              .displayName
-          ),
+          senderUid: originalMessage.senderUid
         },
       };
 
@@ -1735,14 +1758,18 @@ const MainPage: React.FC = () => {
                       if (modal) modal.showModal();
                     }}
                     replyTo={{
-                      senderName: getUserDisplayName(
-                        messages.find((m) => m.id === selectedThread.messageId)
-                          ?.sender.uid || "",
-                        messages.find((m) => m.id === selectedThread.messageId)
-                          ?.sender.email || "",
-                        messages.find((m) => m.id === selectedThread.messageId)
-                          ?.sender.displayName
-                      ),
+                      senderName: (() => {
+                        const originalMessage = messages.find(
+                          (m) => m.id === selectedThread.messageId
+                        );
+                        return originalMessage
+                          ? getUserDisplayName(
+                              originalMessage.senderUid,
+                              originalMessage._sender?.email || "",
+                              originalMessage._sender?.displayName || undefined
+                            )
+                          : "Unknown";
+                      })(),
                       onCancel: handleCloseThread,
                     }}
                     channelMembers={channelMembers.map((member) => ({
@@ -1813,15 +1840,12 @@ const MainPage: React.FC = () => {
 
         {/* Files Modal */}
         <FileListModal
-          messages={messages.filter(
-            (m) =>
-              selectedChannel &&
-              m.channel === selectedChannel.id &&
-              m.attachment
-          )}
+          messages={messages}
           fileSearchQuery={fileSearchQuery}
-          onSearchChange={(query) => setFileSearchQuery(query)}
-          getUserDisplayName={getDisplayNameForMessage}
+          onSearchChange={setFileSearchQuery}
+          getUserDisplayName={getUserDisplayName}
+          formatFileSize={formatFileSize}
+          getFileIcon={getFileIcon}
         />
 
         {/* Links Modal */}
@@ -1831,7 +1855,7 @@ const MainPage: React.FC = () => {
           )}
           linkSearchQuery={linkSearchQuery}
           onSearchChange={(query) => setLinkSearchQuery(query)}
-          getUserDisplayName={getDisplayNameForMessage}
+          getUserDisplayName={getUserDisplayName}
         />
 
         {/* Mentions Modal */}
@@ -1869,9 +1893,9 @@ const MainPage: React.FC = () => {
                           <span>
                             {
                               (getUserDisplayName(
-                                message.sender.uid,
-                                message.sender.email,
-                                message.sender.displayName
+                                message.senderUid,
+                                message._sender?.email || "",
+                                message._sender?.displayName || undefined
                               ) || "?")[0]
                             }
                           </span>
@@ -1880,9 +1904,9 @@ const MainPage: React.FC = () => {
                       <div>
                         <span className="font-medium text-base-content">
                           {getUserDisplayName(
-                            message.sender.uid,
-                            message.sender.email,
-                            message.sender.displayName
+                            message.senderUid,
+                            message._sender?.email || "",
+                            message._sender?.displayName || undefined
                           ) || "Unknown User"}
                         </span>
                         <span className="text-xs text-base-content/70 ml-2">
