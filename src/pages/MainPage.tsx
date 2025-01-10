@@ -1,23 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import Sidebar from "../components/Sidebar";
-import MessageInput from "../components/MessageInput";
-import FileListModal from "../components/FileListModal";
-import MessageList from "../components/MessageList";
-import InviteModal from "../components/InviteModal";
-import ProfileModal from "../components/ProfileModal";
-import AccountModal from "../components/AccountModal";
-import FileUploadModal from "../components/FileUploadModal";
-import WorkspaceSidebar from "../components/WorkspaceSidebar";
-import {
-  FaUserCircle,
-  FaBuilding,
-  FaFolder,
-  FaLink,
-  FaAt,
-} from "react-icons/fa";
+
+// Firebase imports
 import { signOut } from "firebase/auth";
-import { auth, db, storage, messaging, getFCMToken } from "../firebase";
 import { onMessage } from "firebase/messaging";
 import {
   collection,
@@ -37,6 +22,35 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { auth, db, storage, messaging, getFCMToken } from "../firebase";
+
+// Component imports
+import Sidebar from "../components/Sidebar";
+import InviteModal from "../components/InviteModal";
+import ProfileModal from "../components/ProfileModal";
+import AccountModal from "../components/AccountModal";
+import FileUploadModal from "../components/FileUploadModal";
+import WorkspaceSidebar from "../components/WorkspaceSidebar";
+import MainHeader from "../components/MainHeader";
+import MainMessageArea from "../components/MainMessageArea";
+import SearchResultsView from "../components/SearchResultsView";
+import MentionsModal from "../components/MentionsModal";
+import LinksModal from "../components/LinksModal";
+import FilesModal from "../components/FilesModal";
+import DesktopSearchBar from "../components/DesktopSearchBar";
+import ThreadView from "../components/ThreadView";
+import { MessageListRef } from "../components/MessageList";
+
+// Icon imports
+import {
+  FaUserCircle,
+  FaBuilding,
+  FaFolder,
+  FaLink,
+  FaAt,
+} from "react-icons/fa";
+
+// Type imports
 import {
   Message,
   UserData,
@@ -44,6 +58,8 @@ import {
   Channel,
   FirestoreChannel,
 } from "../types/chat";
+
+// Utility imports
 import {
   formatTime,
   shouldShowHeader,
@@ -63,10 +79,8 @@ import {
   handlePasswordUpdate,
   handleResendVerification,
 } from "../utils/auth";
-import LinkListModal from "../components/LinkListModal";
-import MessageText from "../components/MessageText";
-import { MessageListRef } from "../components/MessageList";
 
+// Constants
 const COMMON_EMOJIS = ["👍", "❤️", "😂", "🎉", "🚀"];
 
 const MainPage: React.FC = () => {
@@ -1303,342 +1317,74 @@ const MainPage: React.FC = () => {
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
-      <div className="drawer-content flex flex-col bg-base-200 w-full">
-        {/* Navbar */}
-        <div className="z-10 navbar bg-base-200 w-full">
-          {!isMobileSearchActive ? (
-            // Regular navbar content - shown when not searching
-            <>
-              <div className="flex-none lg:hidden">
-                <label
-                  htmlFor="main-drawer"
-                  className="btn btn-square btn-ghost text-base-content"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    className="inline-block w-6 h-6 stroke-current"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M4 6h16M4 12h16M4 18h16"
-                    ></path>
-                  </svg>
-                </label>
-              </div>
-
-              <div className="flex-1">
-                <div className="flex flex-col">
-                  <h1 className="text-2xl font-bold text-base-content">
-                    {selectedChannel?.dm ? (
-                      <>@{selectedChannel.name}</>
-                    ) : (
-                      <>#{selectedChannel?.name}</>
-                    )}
-                  </h1>
-                  <div className="flex gap-1">
-                    <button
-                      className="btn btn-ghost btn-xs btn-square w-fit text-base-content"
-                      onClick={() => {
-                        const modal = document.getElementById(
-                          "files-modal"
-                        ) as HTMLDialogElement;
-                        if (modal) modal.showModal();
-                      }}
-                      title="Browse files"
-                    >
-                      <FaFolder className="w-6 h-3" />
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-xs btn-square w-fit text-base-content"
-                      onClick={() => {
-                        const modal = document.getElementById(
-                          "links-modal"
-                        ) as HTMLDialogElement;
-                        if (modal) modal.showModal();
-                      }}
-                      title="Browse links"
-                    >
-                      <FaLink className="w-6 h-3" />
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-xs btn-square w-fit text-base-content"
-                      onClick={() => {
-                        const modal = document.getElementById(
-                          "mentions-modal"
-                        ) as HTMLDialogElement;
-                        if (modal) modal.showModal();
-                      }}
-                      title="View mentions"
-                    >
-                      <FaAt className="w-6 h-3" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Search Bar - Modified for mobile */}
-              <div className="flex-none relative">
-                {/* Mobile Search Button */}
-                <button
-                  className="btn btn-ghost btn-circle lg:hidden text-base-content"
-                  onClick={() => setIsMobileSearchActive(true)}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
-                </button>
-
-                {/* Desktop Search - visible only on lg screens */}
-                <div className="hidden lg:block w-96 mx-4">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Search messages..."
-                      className="input input-bordered w-full text-base-content placeholder:text-base-content/60"
-                      value={searchQuery}
-                      onChange={(e) => handleSearch(e.target.value)}
-                    />
-
-                    {(searchResults.length > 0 || isSearching) && (
-                      <div
-                        className="absolute z-[100] bg-base-200 w-full shadow-lg rounded-box"
-                        style={{ top: "calc(100% + 0.5rem)" }}
-                      >
-                        {isSearching ? (
-                          <div className="flex items-center justify-center p-4">
-                            <span className="loading loading-spinner loading-md text-base-content"></span>
-                          </div>
-                        ) : (
-                          searchResults.map((result) => (
-                            <div
-                              key={result.message.id}
-                              onClick={() => {
-                                handleSearchResultClick(result);
-                              }}
-                              className="p-2 hover:bg-base-300 rounded-lg cursor-pointer"
-                            >
-                              <div className="text-sm font-medium text-base-content">
-                                {result.preview}
-                              </div>
-                              <div className="text-xs text-base-content/70">
-                                {result.context}
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex-none gap-2">
-                <button
-                  className={`btn btn-ghost btn-circle text-base-content ${
-                    isRightSidebarOpen ? "btn-active bg-base-300" : ""
-                  }`}
-                  onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
-                  disabled={!isEmailVerified}
-                  title={
-                    !isEmailVerified
-                      ? "Please verify your email to access workspace settings"
-                      : ""
-                  }
-                >
-                  <FaBuilding className="w-5 h-5" />
-                </button>
-                <div className="dropdown dropdown-end">
-                  <div className="indicator">
-                    <label
-                      tabIndex={0}
-                      className="btn btn-ghost btn-circle relative text-base-content"
-                    >
-                      <FaUserCircle className="w-6 h-6" />
-                      {!isEmailVerified && (
-                        <span className="absolute -top-1 -right-1 badge badge-error badge-xs w-3 h-3 p-0"></span>
-                      )}
-                    </label>
-                  </div>
-                  <ul
-                    tabIndex={0}
-                    className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52"
-                  >
-                    <li key="profile">
-                      <a
-                        onClick={() => {
-                          const modal = document.getElementById(
-                            "profile-modal"
-                          ) as HTMLDialogElement;
-                          if (modal) modal.showModal();
-                        }}
-                        className="hover:bg-base-200 active:bg-base-300 px-4 py-2 rounded-lg text-base-content"
-                      >
-                        Profile
-                      </a>
-                    </li>
-                    <li key="account">
-                      <a
-                        onClick={() => {
-                          if (auth.currentUser?.email) {
-                            const modal = document.getElementById(
-                              "account-modal"
-                            ) as HTMLDialogElement;
-                            if (modal) modal.showModal();
-                          }
-                        }}
-                        className="hover:bg-base-200 active:bg-base-300 px-4 py-2 rounded-lg text-base-content relative"
-                      >
-                        Account
-                        {!isEmailVerified && (
-                          <span className="badge badge-error badge-sm">!</span>
-                        )}
-                      </a>
-                    </li>
-                    <li key="sign-out">
-                      <a
-                        onClick={handleSignOut}
-                        className="hover:bg-base-200 active:bg-base-300 px-4 py-2 rounded-lg text-error"
-                      >
-                        Sign out
-                      </a>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </>
-          ) : (
-            // Mobile Search View - shown when searching on mobile
-            <div className="w-full flex items-center gap-2 px-2">
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  placeholder="Search messages..."
-                  className="input input-bordered w-full text-base-content placeholder:text-base-content/60"
-                  value={searchQuery}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  autoFocus
-                />
-                {(searchResults.length > 0 || isSearching) && (
-                  <div
-                    className="absolute z-[100] bg-base-200 w-full shadow-lg rounded-box"
-                    style={{ top: "calc(100% + 0.5rem)" }}
-                  >
-                    {isSearching ? (
-                      <div className="flex items-center justify-center p-4">
-                        <span className="loading loading-spinner loading-md text-base-content"></span>
-                      </div>
-                    ) : (
-                      searchResults.map((result) => (
-                        <div
-                          key={result.message.id}
-                          onClick={() => {
-                            handleSearchResultClick(result);
-                            setIsMobileSearchActive(false);
-                          }}
-                          className="p-2 hover:bg-base-300 rounded-lg cursor-pointer"
-                        >
-                          <div className="text-sm font-medium text-base-content">
-                            {result.preview}
-                          </div>
-                          <div className="text-xs text-base-content/70">
-                            {result.context}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-              <button
-                className="btn btn-ghost text-base-content"
-                onClick={() => {
-                  setSearchQuery("");
-                  setIsMobileSearchActive(false);
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-        </div>
+      <div className="drawer-content flex flex-col">
+        {/* Header */}
+        <MainHeader
+          selectedChannel={selectedChannel}
+          searchQuery={searchQuery}
+          isMobileSearchActive={isMobileSearchActive}
+          onSearchChange={handleSearch}
+          onCancelSearch={() => {
+            setSearchQuery("");
+            setIsMobileSearchActive(false);
+          }}
+          onToggleMobileSearch={() => setIsMobileSearchActive(true)}
+        />
 
         {/* Main Content with Right Sidebar */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Messages Area with Fixed Input */}
+          {/* Messages Area */}
           <div className="flex-1 relative flex flex-col">
-            {/* Scrollable Messages Container */}
-            <div
-              ref={messagesContainerRef}
-              className="absolute inset-0 overflow-y-auto flex flex-col-reverse"
-              style={{ paddingBottom: "130px" }}
-            >
-              <MessageList
-                ref={mainMessageListRef}
-                messages={messages.filter(
-                  (m) =>
-                    selectedChannel &&
-                    m.channel === selectedChannel.id &&
-                    !m.replyTo // Only show messages that aren't replies
-                )}
-                loading={loading}
-                isDirectMessage={!!selectedChannel?.dm}
-                channelName={selectedChannel?.name || ""}
-                getUserDisplayName={getDisplayNameForMessage}
-                getUserPhotoURL={getPhotoURLForMessage}
-                handleAddReaction={handleAddReaction}
-                shouldShowHeader={shouldShowHeaderForMessage}
+            {/* Search Results */}
+            {searchQuery && (
+              <SearchResultsView
+                searchResults={searchResults}
+                searchQuery={searchQuery}
+                getUserDisplayName={getUserDisplayName}
                 formatTime={formatTime}
-                formatFileSize={formatFileSize}
-                getFileIcon={getFileIcon}
-                commonEmojis={COMMON_EMOJIS}
-                onReply={handleReply}
-                replyingToId={replyingTo?.messageId}
-                onOpenThread={handleOpenThread}
+                onResultClick={(message) => handleSearchResultClick({
+                  message,
+                  preview: "",
+                  context: ""
+                })}
               />
-            </div>
+            )}
 
-            {/* Fixed Message Input */}
-            <div className="absolute bottom-0 left-0 right-0 bg-base-200 p-0">
-              <MessageInput
-                message={message}
-                isEmailVerified={isEmailVerified}
-                typingUsers={typingUsers}
-                channel={selectedChannel}
-                onMessageChange={handleMessageChange}
-                onSubmit={handleSendMessage}
-                onFileClick={() => {
-                  const modal = document.getElementById(
-                    "file-upload-modal"
-                  ) as HTMLDialogElement;
-                  if (modal) modal.showModal();
-                }}
-                replyTo={
-                  replyingTo
-                    ? {
-                        senderName: replyingTo.senderName,
-                        onCancel: handleCancelReply,
-                      }
-                    : undefined
-                }
-                channelMembers={channelMembers.map((member) => ({
-                  displayName: member.displayName || null,
-                  email: member.email,
-                }))}
+            {/* Main Message Area */}
+            <MainMessageArea
+              messages={messages.filter(
+                (m) =>
+                  selectedChannel &&
+                  m.channel === selectedChannel.id &&
+                  !m.replyTo // Only show messages that aren't replies
+              )}
+              loading={loading}
+              selectedChannel={selectedChannel}
+              message={message}
+              isEmailVerified={isEmailVerified}
+              typingUsers={typingUsers}
+              channelMembers={channelMembers}
+              replyingTo={replyingTo}
+              getUserDisplayName={getDisplayNameForMessage}
+              getUserPhotoURL={getPhotoURLForMessage}
+              handleAddReaction={handleAddReaction}
+              shouldShowHeader={shouldShowHeaderForMessage}
+              formatTime={formatTime}
+              formatFileSize={formatFileSize}
+              getFileIcon={getFileIcon}
+              commonEmojis={COMMON_EMOJIS}
+              onReply={handleReply}
+              onOpenThread={handleOpenThread}
+              onMessageChange={handleMessageChange}
+              onSendMessage={handleSendMessage}
+              onCancelReply={handleCancelReply}
+            />
+
+            {/* Desktop Search Bar */}
+            <div className="absolute top-4 right-4 w-64">
+              <DesktopSearchBar
+                searchQuery={searchQuery}
+                onSearchChange={handleSearch}
               />
             </div>
           </div>
@@ -1665,123 +1411,34 @@ const MainPage: React.FC = () => {
               workspaceId={workspaceId || ""}
             />
           )}
-
-          {/* Thread Drawer */}
-          {selectedThread && (
-            <div className="fixed inset-0 z-20">
-              {/* Backdrop */}
-              <div
-                className="absolute inset-0 bg-black/30"
-                onClick={handleCloseThread}
-              />
-              {/* Drawer Content */}
-              <div className="absolute right-0 top-0 bottom-0 w-screen md:w-[480px] bg-base-200 shadow-xl transition-transform flex flex-col">
-                {/* Thread Header */}
-                <div className="navbar bg-base-300">
-                  <div className="flex-1">
-                    <span className="text-lg font-semibold text-base-content">
-                      Thread
-                    </span>
-                  </div>
-                  <div className="flex-none">
-                    <button
-                      className="btn btn-ghost btn-sm text-base-content"
-                      onClick={handleCloseThread}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-
-                {/* Thread Content */}
-                <div className="overflow-y-auto flex-1">
-                  <div className="p-4">
-                    {/* Original Message */}
-                    <MessageList
-                      isThread={true}
-                      messages={[
-                        messages.find(
-                          (m) => m.id === selectedThread.messageId
-                        )!,
-                      ]}
-                      loading={false}
-                      isDirectMessage={!!selectedChannel?.dm}
-                      channelName={selectedChannel?.name || ""}
-                      getUserDisplayName={getDisplayNameForMessage}
-                      getUserPhotoURL={getPhotoURLForMessage}
-                      shouldShowHeader={() => true}
-                      formatTime={formatTime}
-                      handleAddReaction={handleAddReaction}
-                      formatFileSize={formatFileSize}
-                      getFileIcon={getFileIcon}
-                      commonEmojis={COMMON_EMOJIS}
-                      hideReplyButton={true}
-                    />
-
-                    {/* Divider */}
-                    <div className="divider text-base-content">Replies</div>
-
-                    {/* Reply Messages */}
-                    <MessageList
-                      isThread={true}
-                      messages={selectedThread.replies}
-                      loading={selectedThread.loading ?? false}
-                      isDirectMessage={!!selectedChannel?.dm}
-                      channelName={selectedChannel?.name || ""}
-                      getUserDisplayName={getDisplayNameForMessage}
-                      getUserPhotoURL={getPhotoURLForMessage}
-                      shouldShowHeader={() => true}
-                      formatTime={formatTime}
-                      handleAddReaction={handleAddReaction}
-                      formatFileSize={formatFileSize}
-                      getFileIcon={getFileIcon}
-                      commonEmojis={COMMON_EMOJIS}
-                      hideReplyButton={true}
-                    />
-                    <div ref={threadMessagesEndRef} />
-                  </div>
-                </div>
-
-                {/* Thread Input */}
-                <div className="p-4 bg-base-200 border-t border-base-300">
-                  <MessageInput
-                    message={threadMessage}
-                    isEmailVerified={isEmailVerified}
-                    typingUsers={typingUsers}
-                    channel={selectedChannel}
-                    onMessageChange={handleThreadMessageChange}
-                    onSubmit={handleThreadSendMessage}
-                    onFileClick={() => {
-                      const modal = document.getElementById(
-                        "file-upload-modal"
-                      ) as HTMLDialogElement;
-                      if (modal) modal.showModal();
-                    }}
-                    replyTo={{
-                      senderName: (() => {
-                        const originalMessage = messages.find(
-                          (m) => m.id === selectedThread.messageId
-                        );
-                        return originalMessage
-                          ? getUserDisplayName(
-                              originalMessage.senderUid,
-                              originalMessage._sender?.email || "",
-                              originalMessage._sender?.displayName || undefined
-                            )
-                          : "Unknown";
-                      })(),
-                      onCancel: handleCloseThread,
-                    }}
-                    channelMembers={channelMembers.map((member) => ({
-                      displayName: member.displayName || null,
-                      email: member.email,
-                    }))}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
+
+        {/* Thread View */}
+        {selectedThread && (
+          <ThreadView
+            selectedThread={{
+              messageId: selectedThread.messageId,
+              replies: selectedThread.replies,
+              loading: selectedThread.loading ?? false
+            }}
+            messages={messages}
+            selectedChannel={selectedChannel}
+            isEmailVerified={isEmailVerified}
+            typingUsers={typingUsers}
+            channelMembers={channelMembers}
+            threadMessage={threadMessage}
+            getUserDisplayName={getUserDisplayName}
+            getUserPhotoURL={getUserPhotoURL}
+            handleAddReaction={handleAddReaction}
+            formatTime={formatTime}
+            formatFileSize={formatFileSize}
+            getFileIcon={getFileIcon}
+            commonEmojis={COMMON_EMOJIS}
+            handleThreadMessageChange={handleThreadMessageChange}
+            handleThreadSendMessage={handleThreadSendMessage}
+            handleCloseThread={handleCloseThread}
+          />
+        )}
 
         {/* Modals */}
         <InviteModal onInvite={handleInviteUser} />
@@ -1838,100 +1495,61 @@ const MainPage: React.FC = () => {
           }}
         />
 
-        {/* Files Modal */}
-        <FileListModal
-          messages={messages}
-          fileSearchQuery={fileSearchQuery}
-          onSearchChange={setFileSearchQuery}
+        <MentionsModal
+          mentions={mentions}
           getUserDisplayName={getUserDisplayName}
+          formatTime={formatTime}
+          onMentionClick={(message) => {
+            messageToScrollToRef.current = message.id;
+            const modal = document.getElementById("mentions-modal") as HTMLDialogElement;
+            if (modal) modal.close();
+          }}
+        />
+
+        <LinksModal
+          links={messages
+            .filter((m) => selectedChannel && m.channel === selectedChannel.id)
+            .map((message) => {
+              const urlMatch = message.text.match(/https?:\/\/[^\s]+/);
+              return {
+                message,
+                url: urlMatch ? urlMatch[0] : "",
+              };
+            })
+            .filter((link) => link.url)}
+          getUserDisplayName={getUserDisplayName}
+          formatTime={formatTime}
+          onLinkClick={(message) => {
+            messageToScrollToRef.current = message.id;
+            const modal = document.getElementById("links-modal") as HTMLDialogElement;
+            if (modal) modal.close();
+          }}
+        />
+
+        <FilesModal
+          files={messages
+            .filter(
+              (m) =>
+                selectedChannel &&
+                m.channel === selectedChannel.id &&
+                m.attachment
+            )
+            .map((message) => ({
+              message,
+              fileName: message.attachment?.name || "",
+              fileSize: message.attachment?.size || 0,
+              contentType: message.attachment?.type,
+            }))}
+          getUserDisplayName={getUserDisplayName}
+          formatTime={formatTime}
           formatFileSize={formatFileSize}
           getFileIcon={getFileIcon}
+          onFileClick={(message) => {
+            messageToScrollToRef.current = message.id;
+            const modal = document.getElementById("files-modal") as HTMLDialogElement;
+            if (modal) modal.close();
+          }}
         />
-
-        {/* Links Modal */}
-        <LinkListModal
-          messages={messages.filter(
-            (m) => selectedChannel && m.channel === selectedChannel.id
-          )}
-          linkSearchQuery={linkSearchQuery}
-          onSearchChange={(query) => setLinkSearchQuery(query)}
-          getUserDisplayName={getUserDisplayName}
-        />
-
-        {/* Mentions Modal */}
-        <dialog id="mentions-modal" className="modal">
-          <div className="modal-box">
-            <h3 className="font-bold text-lg text-base-content">Mentions</h3>
-            <div className="py-4 space-y-4">
-              {mentions.length === 0 ? (
-                <p className="text-center text-base-content/70">
-                  No mentions yet
-                </p>
-              ) : (
-                mentions.map(({ message, mentionedName }) => (
-                  <div
-                    key={message.id}
-                    className="bg-base-100 p-4 rounded-lg cursor-pointer hover:bg-base-200"
-                    onClick={async () => {
-                      // Close the modal
-                      const modal = document.getElementById(
-                        "mentions-modal"
-                      ) as HTMLDialogElement;
-                      if (modal) modal.close();
-
-                      // Use the same navigation logic as search results
-                      await handleSearchResultClick({
-                        message,
-                        preview: message.text,
-                        context: message.replyTo ? "(in thread)" : "",
-                      });
-                    }}
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="avatar placeholder">
-                        <div className="bg-neutral text-neutral-content rounded-full w-8">
-                          <span>
-                            {
-                              (getUserDisplayName(
-                                message.senderUid,
-                                message._sender?.email || "",
-                                message._sender?.displayName || undefined
-                              ) || "?")[0]
-                            }
-                          </span>
-                        </div>
-                      </div>
-                      <div>
-                        <span className="font-medium text-base-content">
-                          {getUserDisplayName(
-                            message.senderUid,
-                            message._sender?.email || "",
-                            message._sender?.displayName || undefined
-                          ) || "Unknown User"}
-                        </span>
-                        <span className="text-xs text-base-content/70 ml-2">
-                          {formatTime(message.timestamp)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-base-content">
-                      <MessageText text={message.text} />
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            <div className="modal-action">
-              <form method="dialog">
-                <button className="btn">Close</button>
-              </form>
-            </div>
-          </div>
-          {/* Add this form for the backdrop */}
-          <form method="dialog" className="modal-backdrop">
-            <button>close</button>
-          </form>
-        </dialog>
 
         {/* Channel Delete Confirmation Modal */}
         <dialog id="delete-channel-modal" className="modal">
