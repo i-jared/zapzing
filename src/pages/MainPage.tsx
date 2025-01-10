@@ -30,6 +30,7 @@ import {
   doc,
   updateDoc,
   arrayUnion,
+  arrayRemove,
   getDoc,
   getDocs,
   limit,
@@ -1316,6 +1317,20 @@ const MainPage: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
+  const handleLeaveWorkspace = async () => {
+    if (!workspaceId || !auth.currentUser) return;
+
+    try {
+      const workspaceRef = doc(db, "workspaces", workspaceId);
+      await updateDoc(workspaceRef, {
+        members: arrayRemove(auth.currentUser.uid)
+      });
+      navigate("/");
+    } catch (error) {
+      console.error("Error leaving workspace:", error);
+    }
+  };
+
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
@@ -1680,6 +1695,7 @@ const MainPage: React.FC = () => {
               onSwitchWorkspace={() => navigate("/")}
               onCancelInvite={handleCancelInvite}
               workspaceId={workspaceId || ""}
+              onLeaveWorkspace={handleLeaveWorkspace}
             />
           )}
 

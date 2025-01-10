@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaUser, FaChevronDown, FaChevronRight } from 'react-icons/fa';
+import { FaUser, FaChevronDown, FaChevronRight, FaCog } from 'react-icons/fa';
 
 interface ChannelMember {
   uid: string;
@@ -20,6 +20,7 @@ interface WorkspaceSidebarProps {
   onSwitchWorkspace: () => void;
   onCancelInvite: (email: string) => void;
   workspaceId: string;
+  onLeaveWorkspace?: () => Promise<void>;
 }
 
 const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
@@ -32,41 +33,70 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   workspaceName,
   onSwitchWorkspace,
   onCancelInvite,
-  workspaceId
+  workspaceId,
+  onLeaveWorkspace
 }) => {
   const handleCopyId = () => {
     navigator.clipboard.writeText(workspaceId);
   };
 
+  const handleLeaveWorkspace = async () => {
+    if (onLeaveWorkspace) {
+      await onLeaveWorkspace();
+      const modal = document.getElementById('leave-workspace-modal') as HTMLDialogElement;
+      if (modal) modal.close();
+    }
+  };
+
   return (
     <div className="w-80 bg-base-100 flex flex-col h-full border-l border-base-content/10 overflow-y-auto z-[20] relative">
       {/* Workspace Title */}
-      <div className="p-4 border-b border-base-content/10">
-        <h2 className="text-xl font-bold text-base-content">{workspaceName}</h2>
-        <div className="flex items-center gap-2 mt-1">
-          <code className="text-xs font-mono text-base-content/70 bg-base-200 px-2 py-1 rounded">
-            {workspaceId}
-          </code>
-          <button 
-            onClick={handleCopyId}
-            className="btn btn-ghost btn-xs !h-7 min-h-0 bg-base-200 hover:bg-base-300 flex items-center justify-center"
-            title="Copy workspace ID"
-          >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              className="h-4 w-4 text-base-content/70"
-              fill="none" 
-              viewBox="0 0 24 24" 
-              stroke="currentColor"
+      <div className="p-4 border-b border-base-content/10 flex justify-between items-start">
+        <div>
+          <h2 className="text-xl font-bold text-base-content">{workspaceName}</h2>
+          <div className="flex items-center gap-2 mt-1">
+            <code className="text-xs font-mono text-base-content/70 bg-base-200 px-2 py-1 rounded">
+              {workspaceId}
+            </code>
+            <button 
+              onClick={handleCopyId}
+              className="btn btn-ghost btn-xs !h-7 min-h-0 bg-base-200 hover:bg-base-300 flex items-center justify-center"
+              title="Copy workspace ID"
             >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" 
-              />
-            </svg>
-          </button>
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                className="h-4 w-4 text-base-content/70"
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" 
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div className="dropdown dropdown-end">
+          <label tabIndex={0} className="btn btn-ghost btn-sm btn-square">
+            <FaCog className="w-4 h-4" />
+          </label>
+          <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
+            <li>
+              <a 
+                onClick={() => {
+                  const modal = document.getElementById('leave-workspace-modal') as HTMLDialogElement;
+                  if (modal) modal.showModal();
+                }}
+                className="text-error"
+              >
+                Leave Workspace
+              </a>
+            </li>
+          </ul>
         </div>
       </div>
 
@@ -178,6 +208,34 @@ const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           Switch Workspaces
         </button>
       </div>
+
+      {/* Leave Workspace Modal */}
+      <dialog id="leave-workspace-modal" className="modal">
+        <div className="modal-box">
+          <h3 className="font-bold text-lg text-base-content">
+            Leave Workspace
+          </h3>
+          <p className="py-4 text-base-content/70">
+            Are you sure you want to leave this workspace? You will lose access to all channels and messages.
+          </p>
+          <div className="modal-action">
+            <form method="dialog">
+              <button className="btn btn-ghost mr-2 text-base-content">
+                Cancel
+              </button>
+              <button
+                className="btn btn-error text-base-content"
+                onClick={handleLeaveWorkspace}
+              >
+                Leave Workspace
+              </button>
+            </form>
+          </div>
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button>close</button>
+        </form>
+      </dialog>
     </div>
   );
 };
