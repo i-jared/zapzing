@@ -45,6 +45,7 @@ interface SidebarProps {
   usersCache: Record<string, UserData>;
   messages: Message[];
   onDeleteChannel?: (channelId: string) => Promise<void>;
+  dmChannelMap: Record<string, Channel>;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -53,6 +54,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   selectedChannel,
   usersCache,
   messages,
+  onDeleteChannel,
+  dmChannelMap,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -214,55 +217,30 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (!auth.currentUser || !workspaceId || !member.uid) return;
 
     try {
-      // First check if DM already exists
+      // Check if DM already exists in our map
+      if (dmChannelMap[member.uid]) {
+        onChannelSelect(dmChannelMap[member.uid]);
+        closeDrawer();
+        return;
+      }
+
+      // Create new DM channel
       const channelsRef = collection(db, "channels");
-      const dmQuery = query(
-        channelsRef,
-        where("workspaceId", "==", workspaceId),
-        where("dm", "array-contains-any", [auth.currentUser.uid, member.uid])
-      );
-
-      const dmSnapshot = await getDocs(dmQuery);
-
-      // Check if DM already exists by looking for a channel that contains both users
-      const existingDM = dmSnapshot.docs.find((doc) => {
-        const data = doc.data();
-        const dmUsers = data.dm || [];
-        return (
-          dmUsers.includes(auth.currentUser!.uid) &&
-          dmUsers.includes(member.uid)
-        );
+      const dmDoc = await addDoc(channelsRef, {
+        workspaceId,
+        createdAt: serverTimestamp(),
+        dm: [auth.currentUser.uid, member.uid],
       });
 
-      if (existingDM) {
-        // Use existing DM channel
-        const data = existingDM.data();
-        const createdAt = data.createdAt?.toDate() || new Date();
-        const channel = {
-          id: existingDM.id,
-          name: member.displayName || member.email,
-          workspaceId: data.workspaceId,
-          createdAt,
-          dm: data.dm,
-        };
-        onChannelSelect(channel);
-      } else {
-        // Create new DM channel
-        const dmDoc = await addDoc(channelsRef, {
-          workspaceId,
-          createdAt: serverTimestamp(),
-          dm: [auth.currentUser.uid, member.uid],
-        });
-
-        const channel = {
-          id: dmDoc.id,
-          name: member.displayName || member.email,
-          workspaceId,
-          createdAt: new Date(),
-          dm: [auth.currentUser.uid, member.uid],
-        };
-        onChannelSelect(channel);
-      }
+      const channel = {
+        id: dmDoc.id,
+        name: member.displayName || member.email,
+        workspaceId,
+        createdAt: new Date(),
+        dm: [auth.currentUser.uid, member.uid],
+      };
+      onChannelSelect(channel);
+      closeDrawer();
     } catch (error) {
       console.error("Error handling DM:", error);
     }

@@ -2,6 +2,7 @@
 
 ## VERY Important Notes
 
+#1 DO NOT make changes to the UI without approval from the team!!!!
 - All current functionality must be preserved during optimization
 - Before making changes that will alter functionality, ask for approval from the team
 - Database schema can be modified, even if it means deleting existing data, if it improves performance

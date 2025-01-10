@@ -2,20 +2,10 @@
 
 ### UID-Based References
 
-- [ ] Convert all data references to use UIDs consistently (users, channels, workspaces, messages)
-- [ ] Remove redundant user data from messages (store only UID)
-- [ ] Update channel references to use UIDs instead of names
-- [ ] Implement proper UID-based workspace member management
-- [ ] Create efficient indexes based on UIDs for faster queries
+- [x] Convert all data references to use UIDs consistently (users, channels, workspaces, messages)
+- [x] Update channel references to use UIDs instead of names
+- [x] Implement proper UID-based workspace member management
 
-
-### Workspace Data Management
-
-- [ ] Implement initial workspace data load and caching strategy
-- [ ] Cache complete workspace user list on client
-- [ ] Cache complete channel list for current workspace
-- [ ] Implement efficient updates for workspace member changes
-- [ ] Set up real-time listeners for workspace data changes
 
 ### Real-time Update Optimization
 
@@ -87,6 +77,7 @@
 
 ### Firebase Queries
 
+- [ ] Create efficient indexes based on UIDs for faster queries
 - [ ] Optimize security rules to reduce read operations
 - [ ] Implement proper indexing for complex queries
 - [ ] Add caching layer for frequently accessed data

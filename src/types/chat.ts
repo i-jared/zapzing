@@ -24,6 +24,8 @@ export interface Message {
     senderUid: string;
   } | null;
   replyCount?: number;
+  // For optimistic updates
+  pending?: boolean;
   // For backward compatibility during migration
   _sender?: {
     uid: string;
@@ -78,6 +80,14 @@ export interface UserData {
       messageId: string;
     };
   };
+}
+
+export interface WorkspaceMember {
+  uid: string;
+  email: string;
+  displayName: string | null;
+  photoURL: string | null;
+  isActive?: boolean;
 }
 
 export interface ChannelMember {

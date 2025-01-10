@@ -56,6 +56,7 @@ import {
   ChannelMember,
   Channel,
   FirestoreChannel,
+  WorkspaceMember,
 } from "../types/chat";
 
 // Utility imports
@@ -95,6 +96,8 @@ const MainPage: React.FC = () => {
   const [isInvitedUsersExpanded, setIsInvitedUsersExpanded] = useState(false);
   const [channelMembers, setChannelMembers] = useState<ChannelMember[]>([]);
   const [usersCache, setUsersCache] = useState<Record<string, UserData>>({});
+  const [dmChannelMap, setDmChannelMap] = useState<Record<string, Channel>>({});
+  const [channels, setChannels] = useState<Channel[]>([]);
   const [typingUsers, setTypingUsers] = useState<{
     [key: string]: { displayName: string | null; email: string };
   }>({});
@@ -276,43 +279,90 @@ const MainPage: React.FC = () => {
     const unsubscribe = onSnapshot(
       allMessagesQuery,
       async (snapshot) => {
-        const messagesData = await Promise.all(
-          snapshot.docs.map(async (doc) => {
-            const data = doc.data();
-            // Fetch sender data from cache or Firestore
-            const senderData = usersCache[data.senderUid] || 
-              await fetchUserData(data.senderUid);
+        // Process only the changes instead of all messages
+        const changes = snapshot.docChanges();
+        
+        // Process each change type separately
+        for (const change of changes) {
+          const data = change.doc.data();
+          // Fetch sender data from cache or Firestore
+          const senderData = usersCache[data.senderUid] || 
+            await fetchUserData(data.senderUid);
 
-            return {
-              id: doc.id,
-              text: data.text,
-              senderUid: data.senderUid,
-              timestamp: data.timestamp?.toDate() || new Date(),
-              channel: data.channel,
-              workspaceId: data.workspaceId,
-              reactions: data.reactions || {},
-              attachment: data.attachment || null,
-              replyTo: data.replyTo || null,
-              replyCount: snapshot.docs.filter(
-                (m) => m.data().replyTo?.messageId === doc.id
-              ).length,
-              _sender: senderData ? {
-                uid: data.senderUid,
-                email: senderData.email,
-                displayName: senderData.displayName,
-                photoURL: senderData.photoURL
-              } : null
-            };
-          })
-        );
+          const messageData = {
+            id: change.doc.id,
+            text: data.text,
+            senderUid: data.senderUid,
+            timestamp: data.timestamp?.toDate() || new Date(),
+            channel: data.channel,
+            workspaceId: data.workspaceId,
+            reactions: data.reactions || {},
+            attachment: data.attachment || null,
+            replyTo: data.replyTo || null,
+            replyCount: snapshot.docs.filter(
+              (m) => m.data().replyTo?.messageId === change.doc.id
+            ).length,
+            _sender: senderData ? {
+              uid: data.senderUid,
+              email: senderData.email,
+              displayName: senderData.displayName,
+              photoURL: senderData.photoURL
+            } : null
+          };
 
-        setAllMessages(messagesData);
+          // Update allMessages based on change type
+          setAllMessages(prev => {
+            const newMessages = [...prev];
+            
+            if (change.type === 'added') {
+              // Remove any optimistic version of this message if it exists
+              // Match by text and sender to identify the optimistic message
+              const optimisticIndex = newMessages.findIndex(msg => 
+                msg.pending && 
+                msg.text === messageData.text && 
+                msg.senderUid === messageData.senderUid &&
+                msg.channel === messageData.channel
+              );
+              
+              if (optimisticIndex !== -1) {
+                // Replace the optimistic message with the real one
+                newMessages[optimisticIndex] = messageData;
+                return newMessages;
+              }
 
-        if (selectedChannel) {
-          const channelMessages = messagesData.filter(
-            (msg) => msg.channel === selectedChannel.id
-          );
-          setMessages(channelMessages);
+              // If no optimistic message found, add as normal
+              const index = newMessages.findIndex(msg => 
+                msg.timestamp > messageData.timestamp
+              );
+              if (index === -1) {
+                newMessages.push(messageData);
+              } else {
+                newMessages.splice(index, 0, messageData);
+              }
+            } else if (change.type === 'modified') {
+              const index = newMessages.findIndex(msg => msg.id === messageData.id);
+              if (index !== -1) {
+                newMessages[index] = messageData;
+              }
+            } else if (change.type === 'removed') {
+              const index = newMessages.findIndex(msg => msg.id === messageData.id);
+              if (index !== -1) {
+                newMessages.splice(index, 1);
+              }
+            }
+            
+            return newMessages;
+          });
+        }
+
+        // Update channel messages if needed
+        if (selectedChannel && changes.length > 0) {
+          setMessages(prev => {
+            const channelMessages = allMessages.filter(
+              msg => msg.channel === selectedChannel.id
+            );
+            return channelMessages;
+          });
         }
 
         setLoading(false);
@@ -350,10 +400,17 @@ const MainPage: React.FC = () => {
   // Update effect to set messages when channel changes
   useEffect(() => {
     if (selectedChannel) {
-      const channelMessages = allMessages.filter(
-        (msg) => msg.channel === selectedChannel.id
-      );
-      setMessages(channelMessages);
+      // Only update messages if channel changes
+      setMessages(prev => {
+        const channelMessages = allMessages.filter(
+          msg => msg.channel === selectedChannel.id
+        );
+        // Only update if the messages have actually changed
+        if (JSON.stringify(prev) !== JSON.stringify(channelMessages)) {
+          return channelMessages;
+        }
+        return prev;
+      });
     } else {
       setMessages([]);
     }
@@ -529,63 +586,6 @@ const MainPage: React.FC = () => {
       navigate("/auth");
     } catch (error) {
       console.error("Error signing out:", error);
-    }
-  };
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!message.trim() || !auth.currentUser || !workspaceId || !selectedChannel || !isEmailVerified)
-      return;
-
-    try {
-      const messagesRef = collection(db, "messages");
-      let channelId = selectedChannel.id;
-
-      // If this is a temporary DM channel, create the real channel first
-      if (selectedChannel.id.startsWith("temp_dm_")) {
-        const channelsRef = collection(db, "channels");
-        const dmDoc = await addDoc(channelsRef, {
-          name: selectedChannel.name,
-          workspaceId,
-          createdAt: serverTimestamp(),
-          dm: selectedChannel.dm,
-        });
-        channelId = dmDoc.id;
-
-        // Update the selected channel with the real channel ID
-        setSelectedChannel({
-          ...selectedChannel,
-          id: channelId,
-        });
-      }
-
-      const messageData = {
-        text: message.trim(),
-        senderUid: auth.currentUser.uid,
-        timestamp: serverTimestamp(),
-        channel: channelId,
-        workspaceId,
-        ...(replyingTo
-          ? {
-              replyTo: {
-                messageId: replyingTo.messageId,
-                threadId: replyingTo.messageId,
-                senderUid: replyingTo.messageId,
-              },
-            }
-          : {}),
-      };
-
-      await addDoc(messagesRef, messageData);
-      setMessage("");
-      setReplyingTo(null);
-
-      // Add scroll after sending
-      setTimeout(() => {
-        mainMessageListRef.current?.scrollToBottom();
-      }, 100);
-    } catch (error) {
-      console.error("Error sending message:", error);
     }
   };
 
@@ -1313,6 +1313,179 @@ const MainPage: React.FC = () => {
     }
   };
 
+  // Add new effect to maintain DM channel mapping
+  useEffect(() => {
+    if (!workspaceId || !auth.currentUser?.uid) return;
+
+    // Subscribe to channels for this workspace
+    const channelsRef = collection(db, "channels");
+    const channelsQuery = query(
+      channelsRef,
+      where("workspaceId", "==", workspaceId),
+      orderBy("createdAt", "asc")
+    );
+
+    const unsubscribe = onSnapshot(
+      channelsQuery,
+      (snapshot) => {
+        const channelsData = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          name: doc.data().name,
+          workspaceId: doc.data().workspaceId,
+          createdAt: doc.data().createdAt?.toDate() || new Date(),
+          dm: doc.data().dm,
+        }));
+
+        // Create DM channel mapping
+        const newDmChannelMap: Record<string, Channel> = {};
+        channelsData.forEach((channel) => {
+          if (channel.dm) {
+            // For each DM channel, map both users to the channel
+            const otherUserId = channel.dm.find(id => id !== auth.currentUser?.uid);
+            if (otherUserId) {
+              newDmChannelMap[otherUserId] = channel;
+            }
+          }
+        });
+        setDmChannelMap(newDmChannelMap);
+
+        setChannels(channelsData);
+        // Select first channel if no channel is selected and there are channels available
+        if (!selectedChannel && channelsData.length > 0) {
+          const firstNonDMChannel = channelsData.find((channel) => !channel.dm);
+          if (firstNonDMChannel) {
+            handleChannelSelect(firstNonDMChannel);
+          }
+        }
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error fetching channels:", error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [workspaceId, auth.currentUser?.uid]);
+
+  // Update handleCreateDM to use the channel map
+  const handleCreateDM = async (member: WorkspaceMember) => {
+    if (!auth.currentUser || !workspaceId || !member.uid) return;
+
+    try {
+      // Check if DM already exists in our map
+      if (dmChannelMap[member.uid]) {
+        handleChannelSelect(dmChannelMap[member.uid]);
+        return;
+      }
+
+      // Create new DM channel
+      const channelsRef = collection(db, "channels");
+      const dmDoc = await addDoc(channelsRef, {
+        workspaceId,
+        createdAt: serverTimestamp(),
+        dm: [auth.currentUser.uid, member.uid],
+      });
+
+      const channel = {
+        id: dmDoc.id,
+        name: member.displayName || member.email,
+        workspaceId,
+        createdAt: new Date(),
+        dm: [auth.currentUser.uid, member.uid],
+      };
+      handleChannelSelect(channel);
+    } catch (error) {
+      console.error("Error handling DM:", error);
+    }
+  };
+
+  // Modify the existing handleSendMessage to include optimistic updates
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!message.trim() || !auth.currentUser || !workspaceId || !selectedChannel || !isEmailVerified) return;
+
+    try {
+      const messagesRef = collection(db, "messages");
+      let channelId = selectedChannel.id;
+
+      // If this is a temporary DM channel, create the real channel first
+      if (selectedChannel.id.startsWith("temp_dm_")) {
+        const channelsRef = collection(db, "channels");
+        const dmDoc = await addDoc(channelsRef, {
+          name: selectedChannel.name,
+          workspaceId,
+          createdAt: serverTimestamp(),
+          dm: selectedChannel.dm,
+        });
+        channelId = dmDoc.id;
+
+        // Update the selected channel with the real channel ID
+        setSelectedChannel({
+          ...selectedChannel,
+          id: channelId,
+        });
+      }
+
+      const timestamp = new Date();
+      const messageData = {
+        text: message.trim(),
+        senderUid: auth.currentUser.uid,
+        channel: channelId,
+        workspaceId,
+        timestamp,
+        reactions: {},
+        replyTo: replyingTo ? {
+          messageId: replyingTo.messageId,
+          senderName: replyingTo.senderName
+        } : null,
+        _sender: {
+          uid: auth.currentUser.uid,
+          email: auth.currentUser.email || '',
+          displayName: auth.currentUser.displayName,
+          photoURL: auth.currentUser.photoURL
+        }
+      };
+
+      // Optimistically add message to state with pending flag
+      const optimisticId = `temp-${Date.now()}`;
+      const optimisticMessage = {
+        ...messageData,
+        id: optimisticId,
+        pending: true
+      } as Message;
+
+      setAllMessages(prev => {
+        const newMessages = [...prev];
+        newMessages.push(optimisticMessage);
+        return newMessages;
+      });
+
+      // Actually send the message
+      await addDoc(messagesRef, {
+        ...messageData,
+        timestamp: serverTimestamp()
+      });
+
+      setMessage("");
+      setReplyingTo(null);
+
+      // Add scroll after sending
+      setTimeout(() => {
+        mainMessageListRef.current?.scrollToBottom();
+      }, 100);
+
+    } catch (error) {
+      console.error("Error sending message:", error);
+      // Remove failed optimistic message
+      setAllMessages(prev => 
+        prev.filter(msg => !msg.pending)
+      );
+      // Show error to user
+      alert("Failed to send message. Please try again.");
+    }
+  };
+
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
@@ -1587,6 +1760,7 @@ const MainPage: React.FC = () => {
           usersCache={usersCache}
           messages={allMessages}
           onDeleteChannel={handleDeleteChannel}
+          dmChannelMap={dmChannelMap}
         />
       </div>
 
