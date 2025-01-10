@@ -51,8 +51,8 @@ const MainHeader: React.FC<MainHeaderProps> = ({
   return (
     <div className="bg-base-100 border-b border-base-300 sticky top-0 z-10">
       {/* Top Navbar */}
-      <div className="flex items-center h-14 px-4">
-        <div className="flex-1 flex gap-4">
+      <div className="navbar h-14 px-4">
+        <div className="navbar-start flex gap-4">
           <label
             htmlFor="main-drawer"
             className="btn btn-ghost btn-sm drawer-button lg:hidden"
@@ -131,7 +131,7 @@ const MainHeader: React.FC<MainHeaderProps> = ({
         </div>
 
         {/* Right side with search and buttons */}
-        <div className="flex gap-2">
+        <div className="navbar-end gap-2">
           {/* Desktop Search - visible only on lg screens */}
           <div className="hidden lg:block w-96 mx-4">
             <div className="relative">

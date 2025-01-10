@@ -228,7 +228,10 @@ const Sidebar: React.FC<SidebarProps> = ({
       const existingDM = dmSnapshot.docs.find((doc) => {
         const data = doc.data();
         const dmUsers = data.dm || [];
-        return dmUsers.includes(auth.currentUser!.uid) && dmUsers.includes(member.uid);
+        return (
+          dmUsers.includes(auth.currentUser!.uid) &&
+          dmUsers.includes(member.uid)
+        );
       });
 
       if (existingDM) {
@@ -363,7 +366,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 WebkitMaskImage: `url(${logoLight})`,
                 maskRepeat: "no-repeat",
                 WebkitMaskRepeat: "no-repeat",
-                maskSize: "auto 100%",
+                maskSize: "100% 100%",
                 WebkitMaskSize: "auto 100%",
                 maskPosition: "left center",
                 WebkitMaskPosition: "left center",
