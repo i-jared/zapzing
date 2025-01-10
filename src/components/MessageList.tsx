@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle } from "react";
+import React, { forwardRef, useImperativeHandle, useEffect, useRef } from "react";
 import {
   FaUser,
   FaSmile,
@@ -44,6 +44,7 @@ interface MessageListProps {
   onOpenThread?: (messageId: string) => void;
   hideReplyButton?: boolean;
   isThread?: boolean;
+  onLoadMore?: () => Promise<void>;
 }
 
 export interface MessageListRef {
@@ -70,14 +71,45 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
       onOpenThread,
       hideReplyButton,
       isThread = false,
+      onLoadMore,
     },
     ref
   ) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const isLoadingMore = useRef(false);
+
+    useEffect(() => {
+      const container = containerRef.current;
+      if (!container || !onLoadMore) return;
+
+      const handleScroll = async () => {
+        // Only trigger when we're very close to the top (20px threshold)
+        if (container.scrollTop < 20 && !isLoadingMore.current) {
+          isLoadingMore.current = true;
+          
+          // Store current scroll height
+          const scrollHeightBefore = container.scrollHeight;
+          
+          // Load more messages
+          await onLoadMore();
+          
+          // After new messages are loaded, adjust scroll position to maintain the same view
+          requestAnimationFrame(() => {
+            const newScrollHeight = container.scrollHeight;
+            const additionalHeight = newScrollHeight - scrollHeightBefore;
+            container.scrollTop = additionalHeight;
+            isLoadingMore.current = false;
+          });
+        }
+      };
+
+      container.addEventListener('scroll', handleScroll);
+      return () => container.removeEventListener('scroll', handleScroll);
+    }, [onLoadMore]);
+
     useImperativeHandle(ref, () => ({
       scrollToBottom: () => {
-        const container = document.querySelector(
-          isThread ? ".thread-messages" : ".main-messages"
-        );
+        const container = containerRef.current;
         if (container) {
           container.scrollTop = container.scrollHeight;
         }
@@ -86,6 +118,7 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
 
     return (
       <div
+        ref={containerRef}
         className={`z-0 p-4 min-h-full ${
           isThread ? "" : "flex flex-col-reverse overflow-y-auto"
         } relative ${isThread ? "thread-messages" : "main-messages"}`}

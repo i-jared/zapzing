@@ -20,6 +20,7 @@ import {
   limit,
   setDoc,
   deleteDoc,
+  startAfter,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { auth, db, storage, messaging, getFCMToken } from "../firebase";
@@ -144,6 +145,8 @@ const MainPage: React.FC = () => {
   const threadMessagesEndRef = useRef<HTMLDivElement>(null);
   const mainMessageListRef = useRef<MessageListRef>(null);
   const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
+  const [lastMessageRef, setLastMessageRef] = useState<any>(null); // Store the last message reference for pagination
+  const MESSAGES_PER_PAGE = 50; // Number of messages to load per page
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
@@ -268,18 +271,18 @@ const MainPage: React.FC = () => {
   useEffect(() => {
     if (!workspaceId || !auth.currentUser?.uid) return;
 
-    // Subscribe to all messages in the workspace
+    // Subscribe to initial batch of messages in the workspace
     const messagesRef = collection(db, "messages");
-    const allMessagesQuery = query(
+    const initialQuery = query(
       messagesRef,
       where("workspaceId", "==", workspaceId),
-      orderBy("timestamp", "asc")
+      orderBy("timestamp", "desc"), // Changed to desc for proper pagination
+      limit(MESSAGES_PER_PAGE)
     );
 
     const unsubscribe = onSnapshot(
-      allMessagesQuery,
+      initialQuery,
       async (snapshot) => {
-        // Process only the changes instead of all messages
         const changes = snapshot.docChanges();
         
         // Process each change type separately
@@ -316,23 +319,20 @@ const MainPage: React.FC = () => {
             
             if (change.type === 'added') {
               // Remove any optimistic version of this message if it exists
-              // Match by text and sender to identify the optimistic message
               const optimisticIndex = newMessages.findIndex(msg => 
                 msg.pending && 
                 msg.text === messageData.text && 
-                msg.senderUid === messageData.senderUid &&
-                msg.channel === messageData.channel
+                msg.senderUid === messageData.senderUid
               );
               
               if (optimisticIndex !== -1) {
-                // Replace the optimistic message with the real one
                 newMessages[optimisticIndex] = messageData;
                 return newMessages;
               }
 
-              // If no optimistic message found, add as normal
+              // Find correct position to insert based on timestamp
               const index = newMessages.findIndex(msg => 
-                msg.timestamp > messageData.timestamp
+                msg.timestamp < messageData.timestamp
               );
               if (index === -1) {
                 newMessages.push(messageData);
@@ -355,12 +355,17 @@ const MainPage: React.FC = () => {
           });
         }
 
+        // Store the last document for pagination
+        if (snapshot.docs.length > 0) {
+          setLastMessageRef(snapshot.docs[snapshot.docs.length - 1]);
+        }
+
         // Update channel messages if needed
         if (selectedChannel && changes.length > 0) {
           setMessages(prev => {
             const channelMessages = allMessages.filter(
               msg => msg.channel === selectedChannel.id
-            );
+            ).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime()); // Ensure chronological order
             return channelMessages;
           });
         }
@@ -375,6 +380,77 @@ const MainPage: React.FC = () => {
 
     return () => unsubscribe();
   }, [workspaceId, auth.currentUser?.uid]);
+
+  // Function to load more messages
+  const handleLoadMore = async () => {
+    if (!workspaceId || !lastMessageRef || loading) return;
+
+    setLoading(true);
+    try {
+      const messagesRef = collection(db, "messages");
+      const nextQuery = query(
+        messagesRef,
+        where("workspaceId", "==", workspaceId),
+        orderBy("timestamp", "desc"),
+        startAfter(lastMessageRef),
+        limit(MESSAGES_PER_PAGE)
+      );
+
+      const snapshot = await getDocs(nextQuery);
+      
+      // Process new messages
+      const newMessages = await Promise.all(
+        snapshot.docs.map(async (doc) => {
+          const data = doc.data();
+          const senderData = usersCache[data.senderUid] || 
+            await fetchUserData(data.senderUid);
+
+          return {
+            id: doc.id,
+            text: data.text,
+            senderUid: data.senderUid,
+            timestamp: data.timestamp?.toDate() || new Date(),
+            channel: data.channel,
+            workspaceId: data.workspaceId,
+            reactions: data.reactions || {},
+            attachment: data.attachment || null,
+            replyTo: data.replyTo || null,
+            replyCount: 0, // We'll update this if needed
+            _sender: senderData ? {
+              uid: data.senderUid,
+              email: senderData.email,
+              displayName: senderData.displayName,
+              photoURL: senderData.photoURL
+            } : null
+          };
+        })
+      );
+
+      // Update last message reference
+      if (snapshot.docs.length > 0) {
+        setLastMessageRef(snapshot.docs[snapshot.docs.length - 1]);
+      }
+
+      // Add new messages to state
+      setAllMessages(prev => {
+        const combined = [...prev, ...newMessages];
+        return combined.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      });
+
+      // Update channel messages if needed
+      if (selectedChannel) {
+        setMessages(prev => {
+          const channelMessages = [...prev, ...newMessages.filter(msg => msg.channel === selectedChannel.id)]
+            .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+          return channelMessages;
+        });
+      }
+    } catch (error) {
+      console.error("Error loading more messages:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Helper function to fetch user data
   const fetchUserData = async (uid: string) => {
@@ -1253,25 +1329,64 @@ const MainPage: React.FC = () => {
     const unsubscribe = onSnapshot(workspaceRef, async (docSnapshot) => {
       if (docSnapshot.exists()) {
         const workspaceData = docSnapshot.data();
-        const memberUids = workspaceData.members || [];
+        const currentMembers = new Set(channelMembers.map(m => m.uid));
+        const newMemberUids = new Set(workspaceData.members || []) as Set<string>;
+        
+        // Find members to add and remove
+        const membersToAdd = [...newMemberUids].filter(uid => !currentMembers.has(uid));
+        const membersToRemove = [...currentMembers].filter(uid => !newMemberUids.has(uid));
 
-        // Fetch user data for each member
-        const memberPromises = memberUids.map(async (uid: string) => {
-          const userRef = doc(db, "users", uid);
-          const userDoc = await getDoc(userRef);
-          const userData = userDoc.data() as UserData | undefined;
+        if (membersToAdd.length === 0 && membersToRemove.length === 0) {
+          return; // No changes needed
+        }
 
-          return {
-            uid,
-            email: userData?.email || "",
-            isCurrentUser: uid === auth.currentUser?.uid,
-            displayName: userData?.displayName || null,
-            photoURL: userData?.photoURL || null,
-          };
+        // Update channel members with delta changes
+        setChannelMembers(prev => {
+          const updatedMembers = prev.filter(member => !membersToRemove.includes(member.uid));
+          
+          // Add new members using cached data when possible
+          const newMemberPromises = membersToAdd.map(async (uid: string) => {
+            // Try to get from cache first
+            if (usersCache[uid]) {
+              const userData = usersCache[uid];
+              return {
+                uid,
+                email: userData.email,
+                isCurrentUser: uid === auth.currentUser?.uid,
+                displayName: userData.displayName,
+                photoURL: userData.photoURL,
+              } as ChannelMember;
+            }
+
+            // Fetch from Firestore if not in cache
+            const userRef = doc(db, "users", uid);
+            const userDoc = await getDoc(userRef);
+            const userData = userDoc.data() as UserData | undefined;
+
+            // Update cache with new user data
+            if (userData) {
+              setUsersCache(prev => ({
+                ...prev,
+                [uid]: userData
+              }));
+            }
+
+            return {
+              uid,
+              email: userData?.email || "",
+              isCurrentUser: uid === auth.currentUser?.uid,
+              displayName: userData?.displayName || null,
+              photoURL: userData?.photoURL || null,
+            } as ChannelMember;
+          });
+
+          // Add new members to the list
+          Promise.all(newMemberPromises).then(newMembers => {
+            setChannelMembers(current => [...current, ...newMembers]);
+          });
+
+          return updatedMembers;
         });
-
-        const members = await Promise.all(memberPromises);
-        setChannelMembers(members);
       }
     });
 
@@ -1328,35 +1443,68 @@ const MainPage: React.FC = () => {
     const unsubscribe = onSnapshot(
       channelsQuery,
       (snapshot) => {
-        const channelsData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          name: doc.data().name,
-          workspaceId: doc.data().workspaceId,
-          createdAt: doc.data().createdAt?.toDate() || new Date(),
-          dm: doc.data().dm,
-        }));
+        // Process only the changes
+        const changes = snapshot.docChanges();
+        
+        setChannels(prev => {
+          const updatedChannels = [...prev];
+          
+          for (const change of changes) {
+            const data = change.doc.data();
+            const channelData = {
+              id: change.doc.id,
+              name: data.name,
+              workspaceId: data.workspaceId,
+              createdAt: data.createdAt?.toDate() || new Date(),
+              dm: data.dm,
+            };
 
-        // Create DM channel mapping
-        const newDmChannelMap: Record<string, Channel> = {};
-        channelsData.forEach((channel) => {
-          if (channel.dm) {
-            // For each DM channel, map both users to the channel
-            const otherUserId = channel.dm.find(id => id !== auth.currentUser?.uid);
-            if (otherUserId) {
-              newDmChannelMap[otherUserId] = channel;
+            if (change.type === 'added') {
+              // Find correct position to insert based on createdAt
+              const index = updatedChannels.findIndex(ch => 
+                ch.createdAt > channelData.createdAt
+              );
+              if (index === -1) {
+                updatedChannels.push(channelData);
+              } else {
+                updatedChannels.splice(index, 0, channelData);
+              }
+            } else if (change.type === 'modified') {
+              const index = updatedChannels.findIndex(ch => ch.id === channelData.id);
+              if (index !== -1) {
+                updatedChannels[index] = channelData;
+              }
+            } else if (change.type === 'removed') {
+              const index = updatedChannels.findIndex(ch => ch.id === channelData.id);
+              if (index !== -1) {
+                updatedChannels.splice(index, 1);
+              }
             }
           }
-        });
-        setDmChannelMap(newDmChannelMap);
 
-        setChannels(channelsData);
-        // Select first channel if no channel is selected and there are channels available
-        if (!selectedChannel && channelsData.length > 0) {
-          const firstNonDMChannel = channelsData.find((channel) => !channel.dm);
-          if (firstNonDMChannel) {
-            handleChannelSelect(firstNonDMChannel);
+          // Create DM channel mapping
+          const newDmChannelMap: Record<string, Channel> = {};
+          updatedChannels.forEach((channel) => {
+            if (channel.dm) {
+              const otherUserId = channel.dm.find(id => id !== auth.currentUser?.uid);
+              if (otherUserId) {
+                newDmChannelMap[otherUserId] = channel;
+              }
+            }
+          });
+          setDmChannelMap(newDmChannelMap);
+
+          // Select first channel if no channel is selected and there are channels available
+          if (!selectedChannel && updatedChannels.length > 0) {
+            const firstNonDMChannel = updatedChannels.find((channel) => !channel.dm);
+            if (firstNonDMChannel) {
+              handleChannelSelect(firstNonDMChannel);
+            }
           }
-        }
+
+          return updatedChannels;
+        });
+
         setLoading(false);
       },
       (error) => {
