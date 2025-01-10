@@ -918,6 +918,9 @@ const MainPage: React.FC = () => {
         text: threadMessage.trim(),
         sender: {
           uid: auth.currentUser.uid,
+          email: auth.currentUser.email,
+          displayName: auth.currentUser.displayName,
+          photoURL: auth.currentUser.photoURL,
         },
         timestamp: serverTimestamp(),
         channel: selectedChannel.id,
@@ -926,12 +929,9 @@ const MainPage: React.FC = () => {
           messageId: selectedThread.messageId,
           threadId: selectedThread.messageId,
           senderName: getUserDisplayName(
-            messages.find((m) => m.id === selectedThread.messageId)?.sender
-              .uid || "",
-            messages.find((m) => m.id === selectedThread.messageId)?.sender
-              .email || "",
-            messages.find((m) => m.id === selectedThread.messageId)?.sender
-              .displayName
+            messages.find((m) => m.id === selectedThread.messageId)?.sender.uid || "",
+            messages.find((m) => m.id === selectedThread.messageId)?.sender.email || "",
+            messages.find((m) => m.id === selectedThread.messageId)?.sender.displayName
           ),
         },
       };
