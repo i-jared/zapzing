@@ -10,16 +10,27 @@ interface StatusModalProps {
 const StatusModal: React.FC<StatusModalProps> = ({ userId, currentStatus }) => {
   const [status, setStatus] = useState(currentStatus || '');
 
+  // Update status when currentStatus changes
+  useEffect(() => {
+    setStatus(currentStatus || '');
+  }, [currentStatus]);
+
+  // Reset status when modal shows or closes
   useEffect(() => {
     const modal = document.getElementById('status-modal') as HTMLDialogElement;
     if (!modal) return;
 
-    const handleClose = () => {
+    const resetStatus = () => {
       setStatus(currentStatus || '');
     };
 
-    modal.addEventListener('close', handleClose);
-    return () => modal.removeEventListener('close', handleClose);
+    modal.addEventListener('show', resetStatus);
+    modal.addEventListener('close', resetStatus);
+    
+    return () => {
+      modal.removeEventListener('show', resetStatus);
+      modal.removeEventListener('close', resetStatus);
+    };
   }, [currentStatus]);
 
   const handleSubmit = async (e: React.FormEvent) => {

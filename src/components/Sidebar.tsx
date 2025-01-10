@@ -92,33 +92,35 @@ const Sidebar: React.FC<SidebarProps> = ({
 
     // Subscribe to workspace members
     const workspaceRef = doc(db, "workspaces", workspaceId);
-    const unsubscribe = onSnapshot(workspaceRef, async (workspaceDoc) => {
+    const unsubscribe = onSnapshot(workspaceRef, (workspaceDoc) => {
       if (!workspaceDoc.exists()) return;
 
       const memberUids = workspaceDoc.data().members || [];
-
-      // Fetch user data for each member using their UIDs
-      const members = await Promise.all(
-        memberUids.map(async (uid: string) => {
-          const userRef = doc(db, "users", uid);
-          const userDoc = await getDoc(userRef);
-          const userData = userDoc.data() as UserData | undefined;
-
+      
+      // Convert member UIDs to workspace members using usersCache
+      const members = memberUids
+        .map(uid => {
+          const userData = usersCache[uid];
+          if (!userData?.email) {
+            console.error('Missing user data for uid:', uid);
+            return null;
+          }
           return {
             uid,
-            email: userData?.email || "",
-            displayName: userData?.displayName || null,
-            photoURL: userData?.photoURL || null,
-            status: userData?.status || null
+            email: userData.email,
+            displayName: userData.displayName || null,
+            photoURL: userData.photoURL || null,
+            status: userData.status || null
           };
         })
-      );
+        .filter((member): member is WorkspaceMember => member !== null)
+        .sort((a, b) => (a.displayName || a.email).localeCompare(b.displayName || b.email));
 
       setWorkspaceMembers(members);
     });
 
     return () => unsubscribe();
-  }, [workspaceId]);
+  }, [workspaceId, usersCache]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -582,7 +584,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                         <div className="bg-neutral text-neutral-content rounded-full w-6">
                           <span className="text-xs">
                             {member.displayName?.[0] ||
-                              member.email[0].toUpperCase()}
+                              (member.email && member.email[0].toUpperCase()) ||
+                              "?"}
                           </span>
                         </div>
                       )}

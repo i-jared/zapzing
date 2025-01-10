@@ -316,26 +316,54 @@ const MainPage: React.FC = () => {
   }, [selectedChannel, allMessages]);
 
   useEffect(() => {
-    const userIds = new Set(messages.map((msg) => msg.sender.uid));
+    if (!workspaceId || !auth.currentUser?.email) return;
 
-    userIds.forEach(async (uid) => {
-      if (!usersCache[uid]) {
+    // Subscribe to workspace document to get member list
+    const workspaceRef = doc(db, "workspaces", workspaceId);
+    const unsubscribeWorkspace = onSnapshot(workspaceRef, async (docSnapshot) => {
+      if (!docSnapshot.exists()) return;
+
+      const memberUids = docSnapshot.data().members || [];
+      
+      // Create real-time listeners for each user
+      const unsubscribeUsers = memberUids.map((uid: string) => {
         const userRef = doc(db, "users", uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          setUsersCache((prev) => ({
-            ...prev,
-            [uid]: userSnap.data() as UserData,
-          }));
-        }
-      }
-    });
-  }, [messages]);
+        return onSnapshot(userRef, (userDoc) => {
+          if (userDoc.exists()) {
+            const userData = userDoc.data() as UserData;
+            if (!userData.email) {
+              console.error('User data missing email:', uid);
+              return;
+            }
+            setUsersCache(prev => ({
+              ...prev,
+              [uid]: {
+                ...prev[uid],  // Preserve any existing data
+                ...userData,   // Update with new data
+                // Ensure critical fields are never null
+                email: userData.email,
+                displayName: userData.displayName || null,
+                photoURL: userData.photoURL || null,
+                status: userData.status || null,
+                blockedUsers: userData.blockedUsers || [],
+                mutedChannels: userData.mutedChannels || [],
+                mutedDMs: userData.mutedDMs || []
+              }
+            }));
+          }
+        });
+      });
 
-  // Update global users cache whenever local cache changes
-  useEffect(() => {
-    setGlobalUsersCache(usersCache);
-  }, [usersCache]);
+      // Cleanup user listeners when workspace members change
+      return () => {
+        unsubscribeUsers.forEach(unsubscribe => unsubscribe());
+      };
+    });
+
+    return () => {
+      unsubscribeWorkspace();
+    };
+  }, [workspaceId, auth.currentUser?.email]);
 
   // Add effect to track user activity
   useEffect(() => {
@@ -1210,39 +1238,34 @@ const MainPage: React.FC = () => {
   }, [messages, auth.currentUser, selectedChannel]);
 
   useEffect(() => {
-    if (!workspaceId || !selectedChannel?.id || !auth.currentUser?.email)
-      return;
+    if (!workspaceId || !selectedChannel?.id || !auth.currentUser?.email) return;
 
     // Fetch channel members
     const workspaceRef = doc(db, "workspaces", workspaceId);
-    const unsubscribe = onSnapshot(workspaceRef, async (docSnapshot) => {
+    const unsubscribe = onSnapshot(workspaceRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
         const workspaceData = docSnapshot.data();
         const memberUids = workspaceData.members || [];
 
-        // Fetch user data for each member
-        const memberPromises = memberUids.map(async (uid: string) => {
-          const userRef = doc(db, "users", uid);
-          const userDoc = await getDoc(userRef);
-          const userData = userDoc.data() as UserData | undefined;
-
+        // Convert member UIDs to channel members using usersCache
+        const members = memberUids.map(uid => {
+          const userData = usersCache[uid];
           return {
             uid,
             email: userData?.email || "",
             isCurrentUser: uid === auth.currentUser?.uid,
             displayName: userData?.displayName || null,
             photoURL: userData?.photoURL || null,
-            status: userData?.status || null,
+            status: userData?.status || null
           };
-        });
+        }).sort((a, b) => (a.displayName || a.email).localeCompare(b.displayName || b.email));
 
-        const members = await Promise.all(memberPromises);
         setChannelMembers(members);
       }
     });
 
     return () => unsubscribe();
-  }, [workspaceId, selectedChannel?.id, auth.currentUser?.uid]);
+  }, [workspaceId, selectedChannel?.id, auth.currentUser?.email, usersCache]);
 
   const handleDeleteChannel = async (channelId: string) => {
     try {

@@ -1,11 +1,15 @@
 import { User, updateProfile, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendEmailVerification } from 'firebase/auth';
-import { doc, setDoc, collection, query, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, getDocs, writeBatch, serverTimestamp, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, getFCMToken } from '../firebase';
 import { UserData } from '../types/chat';
 
 export const initializeUserData = async (user: User): Promise<void> => {
   try {
+    if (!user.email) {
+      throw new Error('User must have an email');
+    }
+
     const fcmToken = await getFCMToken();
     const userRef = doc(db, 'users', user.uid);
     
@@ -49,7 +53,13 @@ export const handleProfileUpdate = async (
 
   // Update or create user document in Firestore
   const userRef = doc(db, 'users', user.uid);
+  
+  // First get the existing user data
+  const userDoc = await getDoc(userRef);
+  const existingData = userDoc.exists() ? userDoc.data() : {};
+  
   const userData = {
+    ...existingData,
     email: user.email,
     displayName: displayName.trim() || null,
     photoURL,
@@ -62,6 +72,7 @@ export const handleProfileUpdate = async (
     ...prev,
     [user.uid]: {
       ...prev[user.uid],
+      ...userData,
       email: user.email ?? '',
       displayName: displayName.trim() || null,
       photoURL
