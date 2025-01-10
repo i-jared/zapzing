@@ -35,6 +35,7 @@ export interface UserData {
   email: string;
   displayName: string | null;
   photoURL: string | null;
+  status?: string | null;  // User's custom status message
   mutedDMs?: string[];  // Array of channel IDs of muted DMs
   mutedChannels?: string[];  // Array of channel IDs that are muted
   blockedUsers?: string[];  // Array of user UIDs that are blocked

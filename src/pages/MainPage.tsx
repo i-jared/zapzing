@@ -128,6 +128,7 @@ const MainPage: React.FC = () => {
   const threadMessagesEndRef = useRef<HTMLDivElement>(null);
   const mainMessageListRef = useRef<MessageListRef>(null);
   const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
+  const [currentUserStatus, setCurrentUserStatus] = useState<string | null>(null);
 
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
@@ -1231,6 +1232,7 @@ const MainPage: React.FC = () => {
             isCurrentUser: uid === auth.currentUser?.uid,
             displayName: userData?.displayName || null,
             photoURL: userData?.photoURL || null,
+            status: userData?.status || null,
           };
         });
 
@@ -1276,6 +1278,20 @@ const MainPage: React.FC = () => {
       console.error("Error canceling invitation:", error);
     }
   };
+
+  // Add status listener
+  useEffect(() => {
+    if (!auth.currentUser) return;
+
+    const userRef = doc(db, 'users', auth.currentUser.uid);
+    const unsubscribe = onSnapshot(userRef, (doc) => {
+      if (doc.exists()) {
+        setCurrentUserStatus(doc.data()?.status || null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   return (
     <div className="drawer lg:drawer-open h-screen w-screen">
@@ -1616,6 +1632,7 @@ const MainPage: React.FC = () => {
                   displayName: member.displayName || null,
                   email: member.email,
                 }))}
+                currentStatus={currentUserStatus}
               />
             </div>
           </div>
@@ -1749,6 +1766,7 @@ const MainPage: React.FC = () => {
                       displayName: member.displayName || null,
                       email: member.email,
                     }))}
+                    currentStatus={currentUserStatus}
                   />
                 </div>
               </div>

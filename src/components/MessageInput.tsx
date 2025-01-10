@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Paperclip, Smile } from 'lucide-react';
+import { Send, Paperclip, Smile, MessageCircle } from 'lucide-react';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
 import { Channel } from '../types/chat';
+import StatusModal from './StatusModal';
+import { auth } from '../firebase';
 
 interface MessageInputProps {
   message: string;
@@ -20,6 +22,7 @@ interface MessageInputProps {
     displayName: string | null;
     email: string;
   }>;
+  currentStatus?: string | null;
 }
 
 // Add this interface for the mention popup
@@ -112,7 +115,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
   onFileClick,
   channel,
   replyTo,
-  channelMembers
+  channelMembers,
+  currentStatus
 }) => {
   const [showMentionPopup, setShowMentionPopup] = useState(false);
   const [mentionSearchText, setMentionSearchText] = useState('');
@@ -222,6 +226,11 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
   };
 
+  const handleStatusClick = () => {
+    const modal = document.getElementById('status-modal') as HTMLDialogElement;
+    if (modal) modal.showModal();
+  };
+
   return (
     <div className="absolute bottom-0 left-0 right-0">
       <div className="p-4">
@@ -321,6 +330,14 @@ const MessageInput: React.FC<MessageInputProps> = ({
                       />
                     </div>
                   </div>
+                  <button 
+                    type="button" 
+                    className="btn btn-ghost btn-sm btn-square"
+                    onClick={handleStatusClick}
+                    disabled={!auth.currentUser}
+                  >
+                    <MessageCircle className="w-4 h-4 text-base-content/70 hover:text-base-content" />
+                  </button>
                 </div>
                 <span className="text-xs text-base-content/50">Press Enter to send</span>
               </div>
@@ -328,6 +345,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
           </>
         )}
       </div>
+      {auth.currentUser && (
+        <StatusModal 
+          userId={auth.currentUser.uid} 
+          currentStatus={currentStatus || null}
+        />
+      )}
     </div>
   );
 };

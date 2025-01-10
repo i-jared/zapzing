@@ -612,9 +612,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                         currentUserData?.blockedUsers?.includes(member.uid)
                           ? "line-through"
                           : ""
-                      }`}
+                      } group relative`}
                     >
                       {member.displayName || member.email}
+                      {usersCache[member.uid]?.status && (
+                        <div className="absolute left-0 -top-12 scale-0 transition-all rounded bg-base-300 p-2 text-sm group-hover:scale-100 whitespace-nowrap border border-base-content/10 before:content-[''] before:absolute before:left-3 before:top-full before:border-8 before:border-x-transparent before:border-b-transparent before:border-t-base-300">
+                          {usersCache[member.uid].status}
+                        </div>
+                      )}
                     </span>
                   </div>
                   <div
