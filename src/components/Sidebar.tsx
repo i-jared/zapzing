@@ -546,16 +546,18 @@ const Sidebar: React.FC<SidebarProps> = ({
                   closeDrawer();
                 }}
                 className={`${
-                  hasUnseenMessages(
-                    channels.find(
-                      (channel) =>
-                        channel.dm?.includes(member.uid) &&
-                        channel.dm?.includes(auth.currentUser?.uid ?? "")
-                    ),
-                    messages,
-                    currentUserData,
-                    selectedChannel?.id
-                  )
+                  selectedChannel?.dm?.includes(member.uid)
+                    ? "bg-base-300 border-2 border-primary"
+                    : hasUnseenMessages(
+                        channels.find(
+                          (channel) =>
+                            channel.dm?.includes(member.uid) &&
+                            channel.dm?.includes(auth.currentUser?.uid ?? "")
+                        ),
+                        messages,
+                        currentUserData,
+                        selectedChannel?.id
+                      )
                     ? "bg-accent text-accent-content hover:bg-accent/70 animate-pulse"
                     : "bg-base-100"
                 } hover:bg-base-200 active:bg-base-300 px-4 py-2 rounded-lg flex-1 text-left`}
