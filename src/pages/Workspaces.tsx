@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaPlus } from "react-icons/fa";
+import { FaPlus, FaUserCircle } from "react-icons/fa";
 import {
   collection,
   query,
@@ -14,6 +14,7 @@ import {
   arrayUnion,
 } from "firebase/firestore";
 import { auth, db } from "../firebase";
+import { signOut } from "firebase/auth";
 
 interface Workspace {
   id: string;
@@ -173,6 +174,15 @@ const Workspaces: React.FC = () => {
     navigate(`/workspace/${workspaceId}`);
   };
 
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      navigate("/auth");
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-base-200">
@@ -198,7 +208,7 @@ const Workspaces: React.FC = () => {
             />
           </div>
         </div>
-        <div className="flex-none px-4">
+        <div className="flex-none gap-2 px-4">
           <button
             className="btn btn-primary"
             onClick={() => {
@@ -211,6 +221,27 @@ const Workspaces: React.FC = () => {
             <FaPlus className="w-4 h-4 mr-2" />
             Create Workspace
           </button>
+          <div className="dropdown dropdown-end">
+            <label
+              tabIndex={0}
+              className="btn btn-ghost btn-circle relative text-base-content"
+            >
+              <FaUserCircle className="w-6 h-6" />
+            </label>
+            <ul
+              tabIndex={0}
+              className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52"
+            >
+              <li key="sign-out">
+                <a
+                  onClick={handleSignOut}
+                  className="hover:bg-base-200 active:bg-base-300 px-4 py-2 rounded-lg text-error"
+                >
+                  Sign out
+                </a>
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
 

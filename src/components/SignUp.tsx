@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import { initializeUserData } from '../utils/auth';
@@ -30,6 +30,13 @@ const SignUp: React.FC<SignUpProps> = ({ onPageChange }) => {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       // Initialize user data with FCM token
       await initializeUserData(userCredential.user);
+      
+      // Send verification email
+      await sendEmailVerification(userCredential.user);
+      
+      // Optionally show a success message to the user
+      alert('Please check your email to verify your account');
+      
       navigate('/');
     } catch (err: any) {
       console.error('Sign up error:', err);
