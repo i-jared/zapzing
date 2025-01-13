@@ -26,6 +26,10 @@ const sgMail = require("@sendgrid/mail");
 const fetch = require("node-fetch");
 const { Storage } = require("@google-cloud/storage");
 const pdf = require("pdf-parse");
+const { Pinecone } = require("@pinecone-database/pinecone");
+const { OpenAIEmbeddings } = require("@langchain/openai");
+const { RecursiveCharacterTextSplitter } = require("langchain/text_splitter");
+const { Client } = require("langsmith");
 
 admin.initializeApp();
 
@@ -296,8 +300,31 @@ exports.searchMovies = onCall(async (request) => {
   }
 });
 
-// Function to get movie script from Scripts.com
+// Function to get movie script from Scripts.com and index it in Pinecone
 exports.getMovieScript = onCall(async (request) => {
+  // Initialize LangSmith client
+  const langsmith = new Client({
+    apiKey: process.env.LANGSMITH_API_KEY,
+    apiUrl: process.env.LANGSMITH_API_URL,
+  });
+
+  // Initialize Pinecone client
+  const pinecone = new Pinecone({
+    apiKey: process.env.PINECONE_API_KEY,
+    environment: process.env.PINECONE_ENVIRONMENT,
+  });
+
+  // Initialize OpenAI embeddings
+  const embeddings = new OpenAIEmbeddings({
+    openAIApiKey: process.env.OPENAI_API_KEY,
+  });
+
+  // Start LangSmith run
+  const run = await langsmith.createRun({
+    name: "get_movie_script",
+    inputs: { movieTitle: request.data.movieTitle },
+  });
+
   try {
     const { movieTitle } = request.data;
     if (!movieTitle) {
@@ -314,28 +341,28 @@ exports.getMovieScript = onCall(async (request) => {
     }&tokenid=${process.env.SCRIPTS_API_KEY}&term=${encodeURIComponent(
       movieTitle
     )}&format=json`;
-    
+
     const searchResponse = await fetch(searchUrl);
     const searchData = await searchResponse.json();
 
     // Handle both single result and multiple results cases
     let selectedMovie;
     if (searchData.result && Array.isArray(searchData.result)) {
-      // Multiple results case
       if (searchData.result.length === 0) {
         throw new HttpsError("not-found", "No script found for this movie");
       }
       selectedMovie = searchData.result[0];
     } else if (searchData.result) {
-      // Single result case
       selectedMovie = searchData.result;
     } else {
       throw new HttpsError("not-found", "No script found for this movie");
     }
 
     // Extract script ID from the link
-    const scriptId = selectedMovie.link.split('/').pop();
-    const movieSlug = selectedMovie.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const scriptId = selectedMovie.link.split("/").pop();
+    const movieSlug = selectedMovie.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-");
 
     // Download PDF script
     const pdfUrl = `https://www.scripts.com/script-pdf-body.php?id=${scriptId}`;
@@ -356,7 +383,39 @@ exports.getMovieScript = onCall(async (request) => {
     const textFile = bucket.file(textFileName);
     await textFile.save(textContent);
 
-    return {
+    // Split text into chunks for indexing
+    const splitter = new RecursiveCharacterTextSplitter({
+      chunkSize: 1000,
+      chunkOverlap: 200,
+    });
+
+    const docs = await splitter.createDocuments([textContent]);
+
+    // Get Pinecone index
+    const index = pinecone.Index(process.env.PINECONE_INDEX);
+
+    // Create vectors with metadata
+    const vectors = await Promise.all(
+      docs.map(async (doc, i) => {
+        const embedding = await embeddings.embedQuery(doc.pageContent);
+        return {
+          id: `${scriptId}-${i}`,
+          values: embedding,
+          metadata: {
+            movieTitle: selectedMovie.title,
+            writer: selectedMovie.writer,
+            scriptId: scriptId,
+            chunk: i,
+            text: doc.pageContent,
+          },
+        };
+      })
+    );
+
+    // Upsert vectors to Pinecone
+    await index.upsert(vectors);
+
+    const result = {
       success: true,
       scriptId,
       title: selectedMovie.title,
@@ -364,9 +423,25 @@ exports.getMovieScript = onCall(async (request) => {
       subtitle: selectedMovie.subtitle,
       pdfPath: pdfFileName,
       textPath: textFileName,
+      vectorCount: vectors.length,
     };
+
+    // End LangSmith run with success
+    await langsmith.updateRun(run.id, {
+      outputs: result,
+      status: "completed",
+    });
+
+    return result;
   } catch (error) {
     console.error("Error getting movie script:", error);
+
+    // End LangSmith run with error
+    await langsmith.updateRun(run.id, {
+      error: error.message,
+      status: "failed",
+    });
+
     throw new HttpsError("internal", error.message);
   }
 });
