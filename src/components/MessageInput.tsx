@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Paperclip, Smile, MessageCircle } from 'lucide-react';
+import { Send, Paperclip, Smile, MessageCircle, Film } from 'lucide-react';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
 import { Channel } from '../types/chat';
 import StatusModal from './StatusModal';
+import MovieCharactersModal from './MovieCharactersModal';
 import { auth } from '../firebase';
 
 interface MessageInputProps {
@@ -231,6 +232,11 @@ const MessageInput: React.FC<MessageInputProps> = ({
     if (modal) modal.showModal();
   };
 
+  const handleMovieCharactersClick = () => {
+    const modal = document.getElementById('movie-characters-modal') as HTMLDialogElement;
+    if (modal) modal.showModal();
+  };
+
   return (
     <div className="absolute bottom-0 left-0 right-0">
       <div className="p-4">
@@ -338,6 +344,14 @@ const MessageInput: React.FC<MessageInputProps> = ({
                   >
                     <MessageCircle className="w-4 h-4 text-base-content/70 hover:text-base-content" />
                   </button>
+                  <button 
+                    type="button" 
+                    className="btn btn-ghost btn-sm btn-square"
+                    onClick={handleMovieCharactersClick}
+                    disabled={!channel}
+                  >
+                    <Film className="w-4 h-4 text-base-content/70 hover:text-base-content" />
+                  </button>
                 </div>
                 <span className="text-xs text-base-content/50">Press Enter to send</span>
               </div>
@@ -346,10 +360,13 @@ const MessageInput: React.FC<MessageInputProps> = ({
         )}
       </div>
       {auth.currentUser && (
-        <StatusModal 
-          userId={auth.currentUser.uid} 
-          currentStatus={currentStatus || null}
-        />
+        <>
+          <StatusModal 
+            userId={auth.currentUser.uid} 
+            currentStatus={currentStatus || null}
+          />
+          <MovieCharactersModal />
+        </>
       )}
     </div>
   );
