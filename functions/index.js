@@ -18,6 +18,7 @@ const {
   onDocumentCreated,
   onDocumentUpdated,
 } = require("firebase-functions/v2/firestore");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const admin = require("firebase-admin");
@@ -245,3 +246,49 @@ exports.onInvitedEmailsUpdate7 = onDocumentUpdated(
     return null;
   }
 );
+
+// Movie search function using OMDB API
+exports.searchMovies = onCall(async (request) => {
+  try {
+    const searchTerm = request.data.searchTerm;
+
+    if (!searchTerm || searchTerm.length < 2) {
+      throw new Error("Search term must be at least 2 characters");
+    }
+
+    // Get API key from environment variables
+    const apiKey = process.env.OMDB_API_KEY;
+    if (!apiKey) {
+      throw new Error("OMDB API key not configured");
+    }
+
+    // Call OMDB API search endpoint
+    const response = await fetch(
+      `http://www.omdbapi.com/?apikey=${apiKey}&s=${encodeURIComponent(
+        searchTerm
+      )}&type=movie`
+    );
+
+    const data = await response.json();
+
+    if (data.Response === "False") {
+      return {
+        movies: [],
+      };
+    }
+
+    // Map results to simplified movie objects
+    const movies = data.Search.map((movie) => ({
+      imdbId: movie.imdbID,
+      title: movie.Title,
+      year: movie.Year,
+    }));
+
+    return {
+      movies: movies,
+    };
+  } catch (error) {
+    console.error("Error searching movies:", error);
+    throw new HttpsError("internal", error.message);
+  }
+});
