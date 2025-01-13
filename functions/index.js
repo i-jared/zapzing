@@ -23,6 +23,9 @@ const { getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const admin = require("firebase-admin");
 const sgMail = require("@sendgrid/mail");
+const fetch = require("node-fetch");
+const { Storage } = require("@google-cloud/storage");
+const pdf = require("pdf-parse");
 
 admin.initializeApp();
 
@@ -289,6 +292,81 @@ exports.searchMovies = onCall(async (request) => {
     };
   } catch (error) {
     console.error("Error searching movies:", error);
+    throw new HttpsError("internal", error.message);
+  }
+});
+
+// Function to get movie script from Scripts.com
+exports.getMovieScript = onCall(async (request) => {
+  try {
+    const { movieTitle } = request.data;
+    if (!movieTitle) {
+      throw new HttpsError("invalid-argument", "Movie title is required");
+    }
+
+    // Initialize Cloud Storage
+    const storage = new Storage();
+    const bucket = storage.bucket("zappzingg.appspot.com");
+
+    // Search for movie on Scripts.com
+    const searchUrl = `https://www.stands4.com/services/v2/scripts.php?uid=${
+      process.env.SCRIPTS_USER_ID
+    }&tokenid=${process.env.SCRIPTS_API_KEY}&term=${encodeURIComponent(
+      movieTitle
+    )}&format=json`;
+    
+    const searchResponse = await fetch(searchUrl);
+    const searchData = await searchResponse.json();
+
+    // Handle both single result and multiple results cases
+    let selectedMovie;
+    if (searchData.result && Array.isArray(searchData.result)) {
+      // Multiple results case
+      if (searchData.result.length === 0) {
+        throw new HttpsError("not-found", "No script found for this movie");
+      }
+      selectedMovie = searchData.result[0];
+    } else if (searchData.result) {
+      // Single result case
+      selectedMovie = searchData.result;
+    } else {
+      throw new HttpsError("not-found", "No script found for this movie");
+    }
+
+    // Extract script ID from the link
+    const scriptId = selectedMovie.link.split('/').pop();
+    const movieSlug = selectedMovie.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+    // Download PDF script
+    const pdfUrl = `https://www.scripts.com/script-pdf-body.php?id=${scriptId}`;
+    const pdfResponse = await fetch(pdfUrl);
+    const pdfBuffer = await pdfResponse.buffer();
+
+    // Save PDF to Cloud Storage
+    const pdfFileName = `scripts/${movieSlug}/${scriptId}.pdf`;
+    const pdfFile = bucket.file(pdfFileName);
+    await pdfFile.save(pdfBuffer);
+
+    // Convert PDF to text
+    const pdfData = await pdf(pdfBuffer);
+    const textContent = pdfData.text;
+
+    // Save text to Cloud Storage
+    const textFileName = `scripts/${movieSlug}/${scriptId}.txt`;
+    const textFile = bucket.file(textFileName);
+    await textFile.save(textContent);
+
+    return {
+      success: true,
+      scriptId,
+      title: selectedMovie.title,
+      writer: selectedMovie.writer,
+      subtitle: selectedMovie.subtitle,
+      pdfPath: pdfFileName,
+      textPath: textFileName,
+    };
+  } catch (error) {
+    console.error("Error getting movie script:", error);
     throw new HttpsError("internal", error.message);
   }
 });
