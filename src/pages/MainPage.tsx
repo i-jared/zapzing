@@ -283,6 +283,8 @@ const MainPage: React.FC = () => {
             replyCount: snapshot.docs.filter(
               (m) => m.data().replyTo?.messageId === doc.id
             ).length,
+            isSystem: data.isSystem || false,
+            movieData: data.movieData || null,
           };
         });
 
@@ -788,7 +790,7 @@ const MainPage: React.FC = () => {
 
     const senderName = getUserDisplayName(
       message.sender.uid,
-      message.sender.email,
+      message.sender.email || "",
       message.sender.displayName
     );
 
@@ -1930,7 +1932,7 @@ const MainPage: React.FC = () => {
                             {
                               (getUserDisplayName(
                                 message.sender.uid,
-                                message.sender.email,
+                                message.sender.email || "",
                                 message.sender.displayName
                               ) || "?")[0]
                             }
@@ -1941,7 +1943,7 @@ const MainPage: React.FC = () => {
                         <span className="font-medium text-base-content">
                           {getUserDisplayName(
                             message.sender.uid,
-                            message.sender.email,
+                            message.sender.email || "",
                             message.sender.displayName
                           ) || "Unknown User"}
                         </span>

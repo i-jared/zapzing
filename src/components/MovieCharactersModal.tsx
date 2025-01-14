@@ -1,8 +1,8 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Search } from 'lucide-react';
-import { getFunctions } from 'firebase/functions';
-import { httpsCallable } from 'firebase/functions';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from '../firebase';
+import { Channel } from '../types/chat';
 
 interface MovieResult {
   imdbId: string;
@@ -10,10 +10,15 @@ interface MovieResult {
   year: string;
 }
 
-const MovieCharactersModal: React.FC = () => {
+interface MovieCharactersModalProps {
+  selectedChannel: Channel;
+}
+
+const MovieCharactersModal: React.FC<MovieCharactersModalProps> = ({ selectedChannel }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<MovieResult[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
   const functions = getFunctions(app);
 
@@ -47,6 +52,20 @@ const MovieCharactersModal: React.FC = () => {
     }, 1000);
   }, [functions]);
 
+  const handleMovieSelect = async (movie: MovieResult) => {
+    try {
+      handleClose();
+      setIsProcessing(true);
+      const getMovieScript = httpsCallable(functions, 'getMovieScript');
+      const result = await getMovieScript({ movieTitle: movie.title, imdbId: movie.imdbId, channelId: selectedChannel.id });
+      console.log('Script processed:', result.data);
+    } catch (error) {
+      console.error('Error processing movie script:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
   };
@@ -75,6 +94,7 @@ const MovieCharactersModal: React.FC = () => {
                 className="input input-bordered join-item flex-1 text-base-content bg-base-100"
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
+                disabled={isProcessing}
               />
               <button className="btn join-item btn-primary">
                 <Search className="w-5 h-5" />
@@ -95,10 +115,7 @@ const MovieCharactersModal: React.FC = () => {
                     <div
                       key={movie.imdbId}
                       className="p-2 hover:bg-base-300 cursor-pointer"
-                      onClick={() => {
-                        // TODO: Handle movie selection
-                        console.log('Selected movie:', movie);
-                      }}
+                      onClick={() => handleMovieSelect(movie)}
                     >
                       <div className="text-sm font-medium text-base-content">
                         {movie.title}
@@ -113,11 +130,22 @@ const MovieCharactersModal: React.FC = () => {
             </div>
           )}
           
+          {/* Processing Overlay */}
+          {isProcessing && (
+            <div className="absolute inset-0 bg-base-200/50 flex items-center justify-center">
+              <div className="text-center">
+                <span className="loading loading-spinner loading-lg text-base-content"></span>
+                <p className="mt-4 font-medium text-base-content">Processing movie script...</p>
+              </div>
+            </div>
+          )}
+          
           <div className="modal-action">
             <button 
               type="button"
               className="btn text-base-content"
               onClick={handleClose}
+              disabled={isProcessing}
             >
               Cancel
             </button>
@@ -128,7 +156,7 @@ const MovieCharactersModal: React.FC = () => {
         <button onClick={() => {
           setSearchQuery('');
           setSearchResults([]);
-        }}>close</button>
+        }} disabled={isProcessing}>close</button>
       </form>
     </dialog>
   );

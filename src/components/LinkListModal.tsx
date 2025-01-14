@@ -1,18 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FaSearch, FaLink, FaExternalLinkAlt, FaSpinner } from 'react-icons/fa';
-
-interface Message {
-  id: string;
-  text: string;
-  sender: {
-    uid: string;
-    email: string;
-    displayName?: string;
-  };
-  timestamp: Date;
-  channel: string;
-  workspaceId: string;
-}
+import { Message } from '../types/chat';
 
 interface LinkListModalProps {
   messages: Message[];
@@ -161,7 +149,7 @@ const LinkListModal: React.FC<LinkListModalProps> = ({
     const url = item.url.toLowerCase();
     const sharedBy = getUserDisplayName(
       item.message.sender.uid,
-      item.message.sender.email,
+      item.message.sender.email || "",
       item.message.sender.displayName
     ).toLowerCase();
     const date = item.message.timestamp.toLocaleDateString().toLowerCase();
@@ -196,7 +184,7 @@ const LinkListModal: React.FC<LinkListModalProps> = ({
                 <div className="text-xs text-base-content/70 mt-2 px-4">
                   Shared by {getUserDisplayName(
                     item.message.sender.uid,
-                    item.message.sender.email,
+                    item.message.sender.email || "",
                     item.message.sender.displayName
                   )} on {item.message.timestamp.toLocaleDateString()}
                 </div>

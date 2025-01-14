@@ -16,34 +16,8 @@ import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
 import MessageText from "./MessageText";
 import { auth } from "../firebase";
+import { Message } from "../types/chat";
 
-interface Message {
-  id: string;
-  text: string;
-  sender: {
-    uid: string;
-    email: string;
-    displayName?: string;
-    photoURL?: string;
-  };
-  timestamp: Date;
-  channel: string;
-  workspaceId: string;
-  reactions?: { [key: string]: { emoji: string; users: string[] } };
-  attachment?: {
-    type: "file" | "video" | "drawing";
-    url: string;
-    name: string;
-    size: number;
-    contentType?: string;
-  };
-  replyTo?: {
-    messageId: string;
-    threadId: string;
-    senderName: string;
-  };
-  replyCount?: number;
-}
 
 interface MessageListProps {
   messages: Message[];
@@ -110,6 +84,8 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
         }
       },
     }));
+
+    console.log(messages?.filter(msg => msg.isSystem).length);
 
     return (
       <div
@@ -196,7 +172,12 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
                   <div className="w-10 flex-shrink-0">
                     {shouldShowHeader(msg, index, filteredMessages) && (
                       <div className="avatar">
-                        {getUserPhotoURL(
+                        {msg.isSystem ? (
+                          <div className="w-10 rounded-full">
+
+                            <img src={`url("/assets/favicon.png")`} alt="System" />
+                          </div>
+                        ) : getUserPhotoURL(
                           msg.sender.uid,
                           msg.sender.photoURL
                         ) ? (
@@ -226,14 +207,16 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
                       <div className="flex items-baseline mb-1">
                         <span
                           className={`font-bold ${
-                            msg.sender.uid === auth.currentUser?.uid
+                            msg.isSystem 
+                              ? "text-info"
+                              : msg.sender.uid === auth.currentUser?.uid
                               ? "text-primary"
                               : "text-secondary"
                           }`}
                         >
-                          {getUserDisplayName(
+                          {msg.isSystem ? "System" : getUserDisplayName(
                             msg.sender.uid,
-                            msg.sender.email,
+                            msg.sender.email || "",
                             msg.sender.displayName
                           )}
                         </span>
@@ -246,6 +229,43 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
                       <div className="flex items-start">
                         <div className="flex-1">
                           <MessageText text={msg.text} />
+                          {msg.isSystem && msg.movieData && (
+                            <div className="mt-4 space-y-4">
+                              {msg.movieData.posterPath && (
+                                <div className="max-w-xs">
+                                  <img
+                                    src={`https://image.tmdb.org/t/p/w500${msg.movieData.posterPath}`}
+                                    alt={msg.movieData.title}
+                                    className="rounded-lg shadow-lg"
+                                  />
+                                </div>
+                              )}
+                              {msg.movieData.characters && msg.movieData.characters.length > 0 && (
+                                <div>
+                                  <h4 className="font-semibold mb-2">Characters joining the chat:</h4>
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                    {msg.movieData.characters.map((character, idx) => (
+                                      <div key={idx} className="flex items-center gap-2">
+                                        {character.profilePath && (
+                                          <img
+                                            src={`https://image.tmdb.org/t/p/w92${character.profilePath}`}
+                                            alt={character.name}
+                                            className="w-8 h-8 rounded-full object-cover"
+                                          />
+                                        )}
+                                        <div className="min-w-0">
+                                          <div className="font-medium truncate">{character.name}</div>
+                                          <div className="text-xs text-base-content/70 truncate">
+                                            {character.actorName}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                           {msg.attachment && (
                             <div className="mt-2 max-w-2xl">
                               {msg.attachment.contentType?.startsWith(

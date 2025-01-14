@@ -1,23 +1,9 @@
 import React from 'react';
 import { FaSearch, FaFile, FaExternalLinkAlt, FaDownload, FaFileImage, FaFilePdf, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileAlt } from 'react-icons/fa';
+import { Message } from '../types/chat';
 
 interface FileListModalProps {
-  messages: Array<{
-    id: string;
-    sender: {
-      uid: string;
-      email: string;
-      displayName?: string;
-    };
-    timestamp: Date;
-    attachment?: {
-      type: 'file' | 'video' | 'drawing';
-      url: string;
-      name: string;
-      size: number;
-      contentType?: string;
-    };
-  }>;
+  messages: Array<Message>;
   fileSearchQuery: string;
   onSearchChange: (query: string) => void;
   getUserDisplayName: (uid: string, email: string, displayName?: string) => string;
@@ -51,7 +37,7 @@ const FileListModal: React.FC<FileListModalProps> = ({
     const searchLower = fileSearchQuery.toLowerCase();
     const fileName = m.attachment?.name.toLowerCase() || '';
     const fileType = m.attachment?.contentType?.toLowerCase() || '';
-    const sharedBy = getUserDisplayName(m.sender.uid, m.sender.email, m.sender.displayName).toLowerCase();
+    const sharedBy = getUserDisplayName(m.sender.uid, m.sender.email || "", m.sender.displayName).toLowerCase();
     const date = m.timestamp.toLocaleDateString().toLowerCase();
     return fileName.includes(searchLower) || 
            fileType.includes(searchLower) || 
@@ -142,7 +128,7 @@ const FileListModal: React.FC<FileListModalProps> = ({
                     </div>
                   )}
                   <div className="text-xs text-base-content/70 mt-2">
-                    Shared by {getUserDisplayName(msg.sender.uid, msg.sender.email, msg.sender.displayName)} on {msg.timestamp.toLocaleDateString()}
+                    Shared by {getUserDisplayName(msg.sender.uid, msg.sender.email || "", msg.sender.displayName)} on {msg.timestamp.toLocaleDateString()}
                   </div>
                 </div>
               </div>

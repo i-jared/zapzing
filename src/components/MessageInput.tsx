@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Paperclip, Smile, MessageCircle, Film } from 'lucide-react';
+import { Send, Paperclip, Smile, MessageCircle, Film, X } from 'lucide-react';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
 import { Channel } from '../types/chat';
@@ -123,6 +123,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const [mentionSearchText, setMentionSearchText] = useState('');
   const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
+  const [isProcessingMovie, setIsProcessingMovie] = useState(false);
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -233,8 +234,14 @@ const MessageInput: React.FC<MessageInputProps> = ({
   };
 
   const handleMovieCharactersClick = () => {
+    setIsProcessingMovie(true); // Set loading state
     const modal = document.getElementById('movie-characters-modal') as HTMLDialogElement;
-    if (modal) modal.showModal();
+    if (modal) {
+      modal.addEventListener('close', () => {
+        setIsProcessingMovie(false); // Clear loading state when modal is closed
+      }, { once: true });
+      modal.showModal();
+    }
   };
 
   return (
@@ -344,14 +351,39 @@ const MessageInput: React.FC<MessageInputProps> = ({
                   >
                     <MessageCircle className="w-4 h-4 text-base-content/70 hover:text-base-content" />
                   </button>
-                  <button 
-                    type="button" 
-                    className="btn btn-ghost btn-sm btn-square"
-                    onClick={handleMovieCharactersClick}
-                    disabled={!channel}
-                  >
-                    <Film className="w-4 h-4 text-base-content/70 hover:text-base-content" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {channel?.activeMovies && Object.values(channel.activeMovies).map((movie) => (
+                      <div key={movie.imdbId} className="relative group">
+                        <img 
+                          src={movie.posterPath} 
+                          alt={movie.title} 
+                          className="w-6 h-6 rounded object-cover"
+                          title={movie.title}
+                        />
+                        <button 
+                          className="absolute -top-1 -right-1 w-4 h-4 bg-base-300 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // TODO: Add function to remove movie from channel
+                          }}
+                        >
+                          <X className="w-3 h-3 text-base-content/70" />
+                        </button>
+                      </div>
+                    ))}
+                    <button 
+                      type="button" 
+                      className="btn btn-ghost btn-sm btn-square relative"
+                      onClick={handleMovieCharactersClick}
+                      disabled={!channel || isProcessingMovie}
+                    >
+                      {isProcessingMovie ? (
+                        <span className="loading loading-spinner loading-xs"></span>
+                      ) : (
+                        <Film className="w-4 h-4 text-base-content/70 hover:text-base-content" />
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <span className="text-xs text-base-content/50">Press Enter to send</span>
               </div>
@@ -365,7 +397,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
             userId={auth.currentUser.uid} 
             currentStatus={currentStatus || null}
           />
-          <MovieCharactersModal />
+          {channel && <MovieCharactersModal selectedChannel={channel} />}
         </>
       )}
     </div>

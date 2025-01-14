@@ -3,12 +3,13 @@ export interface Reaction {
   users: string[];  // array of user IDs who reacted with this emoji
 }
 
+
 export interface Message {
   id: string;
   text: string;
   sender: {
     uid: string;
-    email: string;
+    email: string | null;
     displayName?: string;
     photoURL?: string;
   };
@@ -17,7 +18,7 @@ export interface Message {
   workspaceId: string;
   reactions?: { [key: string]: { emoji: string; users: string[] } };
   attachment?: {
-    type: 'file' | 'video' | 'drawing';
+    type: "file" | "video" | "drawing";
     url: string;
     name: string;
     size: number;
@@ -29,7 +30,20 @@ export interface Message {
     senderName: string;
   };
   replyCount?: number;
+  isSystem?: boolean;
+  movieData?: {
+    movieId: string;
+    imdbId: string;
+    title: string;
+    posterPath: string;
+    characters: {
+      name: string;
+      actorName: string;
+      profilePath: string;
+    }[];
+  };
 }
+
 
 export interface UserData {
   email: string;
@@ -68,6 +82,14 @@ export interface Channel {
   workspaceId: string;
   createdAt: Date;
   dm?: string[];  // Array of two user UIDs for DM channels
+  activeMovies?: {
+    [imdbId: string]: {
+      imdbId: string;
+      title: string;
+      posterPath: string;
+      activatedAt: { seconds: number; nanoseconds: number } | { toDate: () => Date };
+    };
+  };
 }
 
 export interface FirestoreChannel {
