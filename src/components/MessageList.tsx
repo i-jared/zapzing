@@ -29,7 +29,11 @@ interface MessageListProps {
     senderEmail: string,
     senderDisplayName?: string
   ) => string;
-  getUserPhotoURL: (senderId: string, senderPhotoURL?: string) => string | null;
+  getUserPhotoURL: (
+    senderId: string,
+    senderPhotoURL?: string,
+    isBot?: boolean
+  ) => string | null;
   handleAddReaction: (messageId: string, emoji: string) => void;
   shouldShowHeader: (
     msg: Message,
@@ -179,14 +183,16 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
                           </div>
                         ) : getUserPhotoURL(
                             msg.sender.uid,
-                            msg.sender.photoURL
+                            msg.sender.photoURL,
+                            msg.isBot
                           ) ? (
                           <div className="w-10 rounded-full">
                             <img
                               src={
                                 getUserPhotoURL(
                                   msg.sender.uid,
-                                  msg.sender.photoURL
+                                  msg.sender.photoURL,
+                                  msg.isBot
                                 ) || ""
                               }
                               alt="Profile"
@@ -257,7 +263,9 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
                                           >
                                             {character.profilePath && (
                                               <img
-                                                src={getImagePath(character.profilePath)}
+                                                src={getImagePath(
+                                                  character.profilePath
+                                                )}
                                                 alt={character.name}
                                                 className="w-8 h-8 rounded-full object-cover"
                                               />

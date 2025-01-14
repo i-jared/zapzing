@@ -921,7 +921,13 @@ exports.determineCharacterResponse = onDocumentCreated(
         const embeddings = new OpenAIEmbeddings({
           openAIApiKey: process.env.OPENAI_API_KEY,
         });
-        const queryEmbedding = await embeddings.embedQuery(messageData.text);
+
+        // Create a context string that includes recent messages and the current message
+        const contextString = recentMessages
+          .map(msg => `${msg.sender}: ${msg.text}`)
+          .join("\n") + `\n${messageData.sender.displayName || messageData.sender.email || 'Unknown'}: ${messageData.text}`;
+
+        const queryEmbedding = await embeddings.embedQuery(contextString);
 
         // Query Pinecone for relevant context
         const queryResponse = await pineconeIndex.query({
@@ -988,7 +994,8 @@ Determine which character would be most appropriate to respond to this message, 
 2. The character's personality and role in their movie
 3. Whether the message warrants any response at all
 
-Output ONLY the character's name, or "none" if no character should respond. Do not include any other text or explanation.`),
+Output ONLY the character's name, or "none" if no character should respond. Do not include any other text or explanation.
+Output the character's name exactly as it is in the list before the colon. Keep in mind that conversations should be short.`),
       ]);
 
       // Create character selection chain
@@ -1000,7 +1007,7 @@ Output ONLY the character's name, or "none" if no character should respond. Do n
       const characterToRespond = await characterSelectionChain.invoke({
         message: messageData.text,
         characterList: characters
-          .map((c) => `- ${c.name} from "${c.movieTitle}"`)
+          .map((c) => `${c.name}: from "${c.movieTitle}"`)
           .join("\n"),
         chatHistory: recentMessages
           .map((msg) => `${msg.sender}: ${msg.text}`)
@@ -1021,7 +1028,7 @@ Output ONLY the character's name, or "none" if no character should respond. Do n
 
       // Find the selected character's data
       const selectedCharacter = characters.find(
-        (c) => c.name === characterToRespond
+        (c) => c.name.toLowerCase() === characterToRespond.toLowerCase()
       );
       if (!selectedCharacter) {
         console.log("Selected character not found in available characters");
@@ -1052,8 +1059,7 @@ Respond to the message: "{message}"
 Write a response that:
 1. Matches your character's personality, speech patterns, and knowledge
 2. References the movie context when relevant
-3. Maintains a natural, conversational tone
-4. Is concise (1-3 sentences)
+3. Is concise (1-3 sentences)
 
 Output ONLY your response message, no other text or explanation.`),
       ]);

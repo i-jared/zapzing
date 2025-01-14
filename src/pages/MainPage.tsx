@@ -54,6 +54,7 @@ import {
   formatFileSize,
   getFileIcon,
   updateLastSeen,
+  getImagePath,
 } from "../utils/chat";
 import {
   getUserDisplayName,
@@ -287,6 +288,7 @@ const MainPage: React.FC = () => {
               (m) => m.data().replyTo?.messageId === doc.id
             ).length,
             isSystem: data.isSystem || false,
+            isBot: data.isBot || false,
             movieData: data.movieData || null,
           };
         });
@@ -879,7 +881,10 @@ const MainPage: React.FC = () => {
     return getUserDisplayName(senderId, senderEmail, senderDisplayName);
   };
 
-  const getPhotoURLForMessage = (senderId: string, senderPhotoURL?: string) => {
+  const getPhotoURLForMessage = (senderId: string, senderPhotoURL?: string, isBot?: boolean) => {
+    if (isBot) {
+      return getImagePath(senderPhotoURL ?? '');
+    }
     return getUserPhotoURL(senderId, senderPhotoURL);
   };
 

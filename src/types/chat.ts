@@ -31,6 +31,7 @@ export interface Message {
   };
   replyCount?: number;
   isSystem?: boolean;
+  isBot?: boolean;
   movieData?: {
     movieId: string;
     imdbId: string;
