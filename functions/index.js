@@ -21,15 +21,18 @@ const {
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
+const { getStorage } = require("firebase-admin/storage");
 const admin = require("firebase-admin");
 const sgMail = require("@sendgrid/mail");
 const fetch = require("node-fetch");
-const { Storage } = require("@google-cloud/storage");
 const pdf = require("pdf-parse");
 const { Pinecone } = require("@pinecone-database/pinecone");
 const { OpenAIEmbeddings } = require("@langchain/openai");
 const { RecursiveCharacterTextSplitter } = require("langchain/text_splitter");
 const { Client } = require("langsmith");
+const { PineconeStore } = require("@langchain/pinecone");
+const { Document } = require("langchain/document");
+const { v4: uuidv4 } = require("uuid");
 
 admin.initializeApp();
 
@@ -302,38 +305,48 @@ exports.searchMovies = onCall(async (request) => {
 
 // Function to get movie script from Scripts.com and index it in Pinecone
 exports.getMovieScript = onCall(async (request) => {
-  // Initialize LangSmith client
+  console.log("Starting getMovieScript function...");
+  
+  // Initialize LangSmith client for tracking
   const langsmith = new Client({
     apiKey: process.env.LANGSMITH_API_KEY,
     apiUrl: process.env.LANGSMITH_API_URL,
   });
-
-  // Initialize Pinecone client
-  const pinecone = new Pinecone({
-    apiKey: process.env.PINECONE_API_KEY,
-    environment: process.env.PINECONE_ENVIRONMENT,
-  });
+  console.log("LangSmith client initialized");
 
   // Initialize OpenAI embeddings
   const embeddings = new OpenAIEmbeddings({
     openAIApiKey: process.env.OPENAI_API_KEY,
   });
+  console.log("OpenAI embeddings initialized");
 
-  // Start LangSmith run
+  // Initialize Pinecone client
+  const pinecone = new Pinecone({
+    apiKey: process.env.PINECONE_API_KEY,
+  });
+  console.log("Pinecone client initialized");
+
+  // Start LangSmith run with required run_type
+  const runId = uuidv4();
   const run = await langsmith.createRun({
+    id: runId,
     name: "get_movie_script",
+    run_type: "embedding",
     inputs: { movieTitle: request.data.movieTitle },
   });
+  console.log("LangSmith run created with ID:", runId);
 
   try {
     const { movieTitle } = request.data;
     if (!movieTitle) {
       throw new HttpsError("invalid-argument", "Movie title is required");
     }
+    console.log("Processing request for movie:", movieTitle);
 
     // Initialize Cloud Storage
-    const storage = new Storage();
-    const bucket = storage.bucket("zappzingg.appspot.com");
+    const storage = getStorage();
+    const bucket = storage.bucket();
+    console.log("Cloud Storage initialized");
 
     // Search for movie on Scripts.com
     const searchUrl = `https://www.stands4.com/services/v2/scripts.php?uid=${
@@ -341,20 +354,26 @@ exports.getMovieScript = onCall(async (request) => {
     }&tokenid=${process.env.SCRIPTS_API_KEY}&term=${encodeURIComponent(
       movieTitle
     )}&format=json`;
+    console.log("Searching Scripts.com for movie...");
 
     const searchResponse = await fetch(searchUrl);
     const searchData = await searchResponse.json();
+    console.log("Received response from Scripts.com");
 
     // Handle both single result and multiple results cases
     let selectedMovie;
     if (searchData.result && Array.isArray(searchData.result)) {
       if (searchData.result.length === 0) {
+        console.log("No scripts found for movie:", movieTitle);
         throw new HttpsError("not-found", "No script found for this movie");
       }
       selectedMovie = searchData.result[0];
+      console.log(`Found ${searchData.result.length} scripts, selecting first one:`, selectedMovie.title);
     } else if (searchData.result) {
       selectedMovie = searchData.result;
+      console.log("Found single script match:", selectedMovie.title);
     } else {
+      console.log("No scripts found for movie:", movieTitle);
       throw new HttpsError("not-found", "No script found for this movie");
     }
 
@@ -363,57 +382,95 @@ exports.getMovieScript = onCall(async (request) => {
     const movieSlug = selectedMovie.title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-");
+    console.log("Generated script ID:", scriptId);
+
+    // Get Pinecone index
+    const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX);
+    console.log("Connected to Pinecone index");
+
+    // Check if namespace already exists
+    const stats = await pineconeIndex.describeIndexStats();
+    const namespace = `movie-scripts-${scriptId}`;
+    console.log("Checking if script already exists in Pinecone namespace:", namespace);
+
+    if (stats.namespaces && stats.namespaces[namespace]) {
+      console.log("Script already exists in Pinecone with", stats.namespaces[namespace].recordCount, "vectors");
+      const result = {
+        success: true,
+        scriptId,
+        title: selectedMovie.title,
+        writer: selectedMovie.writer,
+        subtitle: selectedMovie.subtitle,
+        vectorCount: stats.namespaces[namespace].recordCount,
+        fromCache: true,
+      };
+
+      // End LangSmith run with cached result
+      await langsmith.updateRun(runId, {
+        outputs: result,
+        status: "completed",
+        end_time: new Date().toISOString(),
+      });
+      console.log("Returning cached result");
+
+      return result;
+    }
+    console.log("Script not found in Pinecone, proceeding with download");
 
     // Download PDF script
     const pdfUrl = `https://www.scripts.com/script-pdf-body.php?id=${scriptId}`;
+    console.log("Downloading PDF from:", pdfUrl);
     const pdfResponse = await fetch(pdfUrl);
     const pdfBuffer = await pdfResponse.buffer();
+    console.log("PDF downloaded successfully");
 
     // Save PDF to Cloud Storage
     const pdfFileName = `scripts/${movieSlug}/${scriptId}.pdf`;
     const pdfFile = bucket.file(pdfFileName);
     await pdfFile.save(pdfBuffer);
+    console.log("PDF saved to Cloud Storage:", pdfFileName);
 
-    // Convert PDF to text
+    // Parse PDF to text using pdf-parse
+    console.log("Parsing PDF to text...");
     const pdfData = await pdf(pdfBuffer);
-    const textContent = pdfData.text;
+    console.log("PDF parsed successfully, text length:", pdfData.text.length);
 
-    // Save text to Cloud Storage
-    const textFileName = `scripts/${movieSlug}/${scriptId}.txt`;
-    const textFile = bucket.file(textFileName);
-    await textFile.save(textContent);
+    // Create document with metadata
+    const doc = new Document({
+      pageContent: pdfData.text,
+      metadata: {
+        movieTitle: selectedMovie.title,
+        writer: selectedMovie.writer,
+        scriptId: scriptId,
+        subtitle: selectedMovie.subtitle,
+      },
+    });
+    console.log("Created LangChain document with metadata");
 
-    // Split text into chunks for indexing
+    // Split text into chunks using LangChain's splitter
     const splitter = new RecursiveCharacterTextSplitter({
       chunkSize: 1000,
       chunkOverlap: 200,
     });
+    console.log("Splitting text into chunks...");
 
-    const docs = await splitter.createDocuments([textContent]);
+    // Split the document into chunks
+    const docs = await splitter.splitDocuments([doc]);
+    console.log("Text split into", docs.length, "chunks");
 
-    // Get Pinecone index
-    const index = pinecone.Index(process.env.PINECONE_INDEX);
-
-    // Create vectors with metadata
-    const vectors = await Promise.all(
-      docs.map(async (doc, i) => {
-        const embedding = await embeddings.embedQuery(doc.pageContent);
-        return {
-          id: `${scriptId}-${i}`,
-          values: embedding,
-          metadata: {
-            movieTitle: selectedMovie.title,
-            writer: selectedMovie.writer,
-            scriptId: scriptId,
-            chunk: i,
-            text: doc.pageContent,
-          },
-        };
-      })
-    );
-
-    // Upsert vectors to Pinecone
-    await index.upsert(vectors);
+    // Create PineconeStore with the documents using LangChain
+    console.log("Uploading chunks to Pinecone...");
+    await PineconeStore.fromDocuments(docs, embeddings, {
+      pineconeIndex,
+      namespace,
+      textKey: "text",
+      metadata: {
+        movieTitle: selectedMovie.title,
+        writer: selectedMovie.writer,
+        scriptId: scriptId,
+      },
+    });
+    console.log("Chunks successfully uploaded to Pinecone");
 
     const result = {
       success: true,
@@ -422,25 +479,29 @@ exports.getMovieScript = onCall(async (request) => {
       writer: selectedMovie.writer,
       subtitle: selectedMovie.subtitle,
       pdfPath: pdfFileName,
-      textPath: textFileName,
-      vectorCount: vectors.length,
+      vectorCount: docs.length,
+      fromCache: false,
     };
 
     // End LangSmith run with success
-    await langsmith.updateRun(run.id, {
+    await langsmith.updateRun(runId, {
       outputs: result,
       status: "completed",
+      end_time: new Date().toISOString(),
     });
+    console.log("Function completed successfully");
 
     return result;
   } catch (error) {
-    console.error("Error getting movie script:", error);
+    console.error("Error in getMovieScript:", error);
 
     // End LangSmith run with error
-    await langsmith.updateRun(run.id, {
+    await langsmith.updateRun(runId, {
       error: error.message,
       status: "failed",
+      end_time: new Date().toISOString(),
     });
+    console.log("Function failed with error:", error.message);
 
     throw new HttpsError("internal", error.message);
   }
