@@ -605,7 +605,7 @@ exports.getMovieScript = onCall(async (request) => {
 
       // Process cast members and save their profile images
       characters = await Promise.all(
-        creditsData.cast.map(async (actor) => {
+        creditsData.cast.slice(0, 20).map(async (actor) => {
           let profilePath = null;
           if (actor.profile_path) {
             const profileUrl = `https://image.tmdb.org/t/p/original${actor.profile_path}`;
