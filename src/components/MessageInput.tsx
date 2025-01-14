@@ -386,19 +386,20 @@ const MessageInput: React.FC<MessageInputProps> = ({
                       )}
                     </button>
                     {channel?.activeMovies && Object.values(channel.activeMovies).map((movie) => (
-                      <div key={movie.imdbId} className="relative group">
-                        <img 
-                          src={getImagePath(movie.posterPath)} 
-                          alt={movie.title} 
-                          className="w-6 h-6 rounded object-cover"
-                          title={movie.title}
-                        />
-                        <button 
-                          className="absolute -top-1 -right-1 w-4 h-4 bg-base-300 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => handleRemoveMovie(movie.imdbId, e)}
-                        >
-                          <X className="w-3 h-3 text-base-content/70" />
-                        </button>
+                      <div key={movie.imdbId} className="relative w-6 h-6">
+                        <div className="group relative w-full h-full">
+                          <img 
+                            src={getImagePath(movie.posterPath)} 
+                            alt={movie.title} 
+                            className="w-full h-full rounded object-cover"
+                            title={movie.title}
+                          />
+                          {/* Overlay that appears on hover */}
+                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all duration-200 rounded flex items-center justify-center cursor-pointer"
+                               onClick={(e) => handleRemoveMovie(movie.imdbId, e)}>
+                            <X className="w-3 h-3 text-white" />
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>

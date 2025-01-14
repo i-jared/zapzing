@@ -719,7 +719,7 @@ exports.getMovieScript = onCall(async (request) => {
       title: existingMovieData?.title || selectedMovie.title,
       writer: selectedMovie?.writer,
       subtitle: selectedMovie?.subtitle,
-      vectorCount: docs?.length || stats.namespaces[`movie-scripts-${scriptId}`]?.recordCount || 0,
+      vectorCount: stats.namespaces[`movie-scripts-${scriptId}`]?.recordCount || 0,
       fromCache: false,
       tmdb: {
         id: tmdbId,
