@@ -806,6 +806,8 @@ exports.getMovieScript = onCall(async (request) => {
 exports.determineCharacterResponse = onDocumentCreated(
   "messages/{messageId}",
   async (event) => {
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
     // Initialize LangSmith client for tracking
     const langsmith = new Client({
       apiKey: process.env.LANGSMITH_API_KEY,
@@ -995,7 +997,9 @@ Determine which character would be most appropriate to respond to this message, 
 3. Whether the message warrants any response at all
 
 Output ONLY the character's name, or "none" if no character should respond. Do not include any other text or explanation.
-Output the character's name exactly as it is in the list before the colon. Keep in mind that conversations should be short.`),
+Output the character's name exactly as it is in the list before the colon. Keep in mind that conversations should be short.
+If two characters have responded back and forth for a few messages, do not respond. Don't keep the conversation to just one
+or two characters unless strictly necessary; try to keep everyone involved.`),
       ]);
 
       // Create character selection chain
@@ -1052,6 +1056,7 @@ Output the character's name exactly as it is in the list before the colon. Keep 
 Recent chat context:
 {chatHistory}
 
+Movie context:
 {movieContext}
 
 Respond to the message: "{message}"
@@ -1060,6 +1065,7 @@ Write a response that:
 1. Matches your character's personality, speech patterns, and knowledge
 2. References the movie context when relevant
 3. Is concise (1-3 sentences)
+4. Don't be overly kind or friendly. Match the tone of the movie and character.
 
 Output ONLY your response message, no other text or explanation.`),
       ]);
