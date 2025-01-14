@@ -337,227 +337,389 @@ exports.getMovieScript = onCall(async (request) => {
   console.log("LangSmith run created with ID:", runId);
 
   try {
-    const { movieTitle, imdbId } = request.data;
-    if (!movieTitle || !imdbId) {
-      throw new HttpsError("invalid-argument", "Movie title and IMDB ID are required");
+    const { movieTitle, imdbId, channelId } = request.data;
+    if (!movieTitle || !imdbId || !channelId) {
+      throw new HttpsError("invalid-argument", "Movie title, IMDB ID, and channel ID are required");
     }
     console.log("Processing request for movie:", movieTitle);
+
+    // Check Firestore first for existing movie data
+    const db = getFirestore();
+    console.log("Checking Firestore for existing movie data...");
+    
+    // Get movie by IMDB ID
+    const movieDoc = await db.collection('movies').doc(imdbId).get();
+    let existingMovieData = null;
+    let tmdbId = null;
+    let posterPath = null;
+    let characters = null;
+
+    if (movieDoc.exists) {
+      existingMovieData = movieDoc.data();
+      tmdbId = existingMovieData.tmdbId;
+      posterPath = existingMovieData.posterPath;
+      console.log("Found existing movie data in Firestore");
+
+      // If we have both script and characters, we can return early
+      if (existingMovieData.hasScript && existingMovieData.hasCharacters) {
+        console.log("Movie already has script and characters");
+
+        // Get existing bots
+        const botsSnapshot = await db.collection('bots')
+          .where('movieId', '==', imdbId)
+          .get();
+        
+        characters = botsSnapshot.docs.map(doc => ({
+          name: doc.data().characterName,
+          profilePath: doc.data().profilePicture,
+          actorName: doc.data().actorName,
+          actorId: doc.data().actorId,
+        }));
+
+        // Update channel's activeMovies
+        console.log("Updating channel's activeMovies...");
+        const channelRef = db.collection('channels').doc(channelId);
+        await channelRef.set({
+          activeMovies: {
+            [imdbId]: {
+              imdbId,
+              title: existingMovieData.title,
+              activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            }
+          }
+        }, { merge: true });
+        console.log("Channel activeMovies updated");
+
+        const result = {
+          success: true,
+          scriptId: existingMovieData.scriptId,
+          title: existingMovieData.title,
+          vectorCount: stats.namespaces[`movie-scripts-${existingMovieData.scriptId}`]?.recordCount || 0,
+          fromCache: true,
+          tmdb: {
+            id: tmdbId,
+            posterPath,
+            characters,
+          },
+        };
+
+        // End LangSmith run with cached result
+        await langsmith.updateRun(runId, {
+          outputs: result,
+          status: "completed",
+          end_time: new Date().toISOString(),
+        });
+        console.log("Returning cached result from Firestore");
+
+        return result;
+      }
+
+      // If we have characters but no script
+      if (existingMovieData.hasCharacters) {
+        console.log("Using existing character data");
+        const botsSnapshot = await db.collection('bots')
+          .where('movieId', '==', imdbId)
+          .get();
+        
+        characters = botsSnapshot.docs.map(doc => ({
+          name: doc.data().characterName,
+          profilePath: doc.data().profilePicture,
+          actorName: doc.data().actorName,
+          actorId: doc.data().actorId,
+        }));
+      }
+
+      console.log("Found partial movie data, will update as needed");
+    }
 
     // Initialize Cloud Storage
     const storage = getStorage();
     const bucket = storage.bucket();
     console.log("Cloud Storage initialized");
 
-    // Search for movie on Scripts.com
-    const searchUrl = `https://www.stands4.com/services/v2/scripts.php?uid=${
-      process.env.SCRIPTS_USER_ID
-    }&tokenid=${process.env.SCRIPTS_API_KEY}&term=${encodeURIComponent(
-      movieTitle
-    )}&format=json`;
-    console.log("Searching Scripts.com for movie...");
+    // Only search for script if we don't have it
+    let scriptId = existingMovieData?.scriptId;
+    let selectedMovie = null;
 
-    const searchResponse = await fetch(searchUrl);
-    const searchData = await searchResponse.json();
-    console.log("Received response from Scripts.com");
+    if (!existingMovieData?.hasScript) {
+      // Search for movie on Scripts.com
+      const searchUrl = `https://www.stands4.com/services/v2/scripts.php?uid=${
+        process.env.SCRIPTS_USER_ID
+      }&tokenid=${process.env.SCRIPTS_API_KEY}&term=${encodeURIComponent(
+        movieTitle
+      )}&format=json`;
+      console.log("Searching Scripts.com for movie...");
 
-    // Handle both single result and multiple results cases
-    let selectedMovie;
-    if (searchData.result && Array.isArray(searchData.result)) {
-      if (searchData.result.length === 0) {
+      const searchResponse = await fetch(searchUrl);
+      const searchData = await searchResponse.json();
+      console.log("Received response from Scripts.com");
+
+      // Handle both single result and multiple results cases
+      if (searchData.result && Array.isArray(searchData.result)) {
+        if (searchData.result.length === 0) {
+          console.log("No scripts found for movie:", movieTitle);
+          throw new HttpsError("not-found", "No script found for this movie");
+        }
+        selectedMovie = searchData.result[0];
+        console.log(`Found ${searchData.result.length} scripts, selecting first one:`, selectedMovie.title);
+      } else if (searchData.result) {
+        selectedMovie = searchData.result;
+        console.log("Found single script match:", selectedMovie.title);
+      } else {
         console.log("No scripts found for movie:", movieTitle);
         throw new HttpsError("not-found", "No script found for this movie");
       }
-      selectedMovie = searchData.result[0];
-      console.log(`Found ${searchData.result.length} scripts, selecting first one:`, selectedMovie.title);
-    } else if (searchData.result) {
-      selectedMovie = searchData.result;
-      console.log("Found single script match:", selectedMovie.title);
-    } else {
-      console.log("No scripts found for movie:", movieTitle);
-      throw new HttpsError("not-found", "No script found for this movie");
+
+      // Extract script ID from the link
+      scriptId = selectedMovie.link.split("/").pop();
+      console.log("Generated script ID:", scriptId);
     }
 
-    // Extract script ID from the link
-    const scriptId = selectedMovie.link.split("/").pop();
-    const movieSlug = selectedMovie.title
+    const movieSlug = (existingMovieData?.title || selectedMovie.title)
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-");
-    console.log("Generated script ID:", scriptId);
 
-    // Get Pinecone index
-    const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX);
-    console.log("Connected to Pinecone index");
+    // Only process script if we don't have it
+    if (!existingMovieData?.hasScript) {
+      // Get Pinecone index
+      const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX);
+      console.log("Connected to Pinecone index");
 
-    // Check if namespace already exists
-    const stats = await pineconeIndex.describeIndexStats();
-    const namespace = `movie-scripts-${scriptId}`;
-    console.log("Checking if script already exists in Pinecone namespace:", namespace);
+      // Check if namespace already exists
+      const stats = await pineconeIndex.describeIndexStats();
+      const namespace = `movie-scripts-${scriptId}`;
+      console.log("Checking if script already exists in Pinecone namespace:", namespace);
 
-    if (stats.namespaces && stats.namespaces[namespace]) {
-      console.log("Script already exists in Pinecone with", stats.namespaces[namespace].recordCount, "vectors");
-      const result = {
-        success: true,
-        scriptId,
-        title: selectedMovie.title,
-        writer: selectedMovie.writer,
-        subtitle: selectedMovie.subtitle,
-        vectorCount: stats.namespaces[namespace].recordCount,
-        fromCache: true,
-      };
+      if (!(stats.namespaces && stats.namespaces[namespace])) {
+        console.log("Script not found in Pinecone, proceeding with download");
 
-      // End LangSmith run with cached result
-      await langsmith.updateRun(runId, {
-        outputs: result,
-        status: "completed",
-        end_time: new Date().toISOString(),
-      });
-      console.log("Returning cached result");
+        // Download PDF script
+        const pdfUrl = `https://www.scripts.com/script-pdf-body.php?id=${scriptId}`;
+        console.log("Downloading PDF from:", pdfUrl);
+        const pdfResponse = await fetch(pdfUrl);
+        const pdfBuffer = await pdfResponse.buffer();
+        console.log("PDF downloaded successfully");
 
-      return result;
-    }
-    console.log("Script not found in Pinecone, proceeding with download");
+        // Save PDF to Cloud Storage
+        const pdfFileName = `scripts/${movieSlug}/${scriptId}.pdf`;
+        const pdfFile = bucket.file(pdfFileName);
+        await pdfFile.save(pdfBuffer);
+        console.log("PDF saved to Cloud Storage:", pdfFileName);
 
-    // Download PDF script
-    const pdfUrl = `https://www.scripts.com/script-pdf-body.php?id=${scriptId}`;
-    console.log("Downloading PDF from:", pdfUrl);
-    const pdfResponse = await fetch(pdfUrl);
-    const pdfBuffer = await pdfResponse.buffer();
-    console.log("PDF downloaded successfully");
+        // Parse PDF to text using pdf-parse
+        console.log("Parsing PDF to text...");
+        const pdfData = await pdf(pdfBuffer);
+        console.log("PDF parsed successfully, text length:", pdfData.text.length);
 
-    // Save PDF to Cloud Storage
-    const pdfFileName = `scripts/${movieSlug}/${scriptId}.pdf`;
-    const pdfFile = bucket.file(pdfFileName);
-    await pdfFile.save(pdfBuffer);
-    console.log("PDF saved to Cloud Storage:", pdfFileName);
+        // Create document with metadata
+        const doc = new Document({
+          pageContent: pdfData.text,
+          metadata: {
+            movieTitle: selectedMovie.title,
+            writer: selectedMovie.writer,
+            scriptId: scriptId,
+            subtitle: selectedMovie.subtitle,
+          },
+        });
+        console.log("Created LangChain document with metadata");
 
-    // Parse PDF to text using pdf-parse
-    console.log("Parsing PDF to text...");
-    const pdfData = await pdf(pdfBuffer);
-    console.log("PDF parsed successfully, text length:", pdfData.text.length);
+        // Split text into chunks using LangChain's splitter
+        const splitter = new RecursiveCharacterTextSplitter({
+          chunkSize: 1000,
+          chunkOverlap: 200,
+        });
+        console.log("Splitting text into chunks...");
 
-    // Create document with metadata
-    const doc = new Document({
-      pageContent: pdfData.text,
-      metadata: {
-        movieTitle: selectedMovie.title,
-        writer: selectedMovie.writer,
-        scriptId: scriptId,
-        subtitle: selectedMovie.subtitle,
-      },
-    });
-    console.log("Created LangChain document with metadata");
+        // Split the document into chunks
+        const docs = await splitter.splitDocuments([doc]);
+        console.log("Text split into", docs.length, "chunks");
 
-    // Split text into chunks using LangChain's splitter
-    const splitter = new RecursiveCharacterTextSplitter({
-      chunkSize: 1000,
-      chunkOverlap: 200,
-    });
-    console.log("Splitting text into chunks...");
-
-    // Split the document into chunks
-    const docs = await splitter.splitDocuments([doc]);
-    console.log("Text split into", docs.length, "chunks");
-
-    // Create PineconeStore with the documents using LangChain
-    console.log("Uploading chunks to Pinecone...");
-    await PineconeStore.fromDocuments(docs, embeddings, {
-      pineconeIndex,
-      namespace,
-      textKey: "text",
-      metadata: {
-        movieTitle: selectedMovie.title,
-        writer: selectedMovie.writer,
-        scriptId: scriptId,
-      },
-    });
-    console.log("Chunks successfully uploaded to Pinecone");
-
-    // Get TMDB movie data using IMDB ID
-    console.log("Fetching TMDB data using IMDB ID:", imdbId);
-    const tmdbFindResponse = await fetch(
-      `https://api.themoviedb.org/3/find/${imdbId}?external_source=imdb_id`,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}`,
-          accept: "application/json",
-        },
+        // Create PineconeStore with the documents using LangChain
+        console.log("Uploading chunks to Pinecone...");
+        await PineconeStore.fromDocuments(docs, embeddings, {
+          pineconeIndex,
+          namespace,
+          textKey: "text",
+          metadata: {
+            movieTitle: selectedMovie.title,
+            writer: selectedMovie.writer,
+            scriptId: scriptId,
+          },
+        });
+        console.log("Chunks successfully uploaded to Pinecone");
       }
-    );
-    const tmdbFindData = await tmdbFindResponse.json();
-    
-    if (!tmdbFindData.movie_results || tmdbFindData.movie_results.length === 0) {
-      console.log("Movie not found in TMDB");
-      throw new HttpsError("not-found", "Movie not found in TMDB");
     }
 
-    const tmdbMovie = tmdbFindData.movie_results[0];
-    const tmdbId = tmdbMovie.id;
-    console.log("Found TMDB movie:", tmdbMovie.title, "ID:", tmdbId);
-
-    // Save movie poster if available
-    let posterPath = null;
-    if (tmdbMovie.poster_path) {
-      const posterUrl = `https://image.tmdb.org/t/p/original${tmdbMovie.poster_path}`;
-      console.log("Downloading movie poster from:", posterUrl);
-      const posterResponse = await fetch(posterUrl);
-      const posterBuffer = await posterResponse.buffer();
-      
-      const posterFileName = `posters/${movieSlug}/${tmdbId}.jpg`;
-      const posterFile = bucket.file(posterFileName);
-      await posterFile.save(posterBuffer);
-      posterPath = posterFileName;
-      console.log("Movie poster saved to:", posterFileName);
-    }
-
-    // Get movie credits to find characters
-    console.log("Fetching movie credits from TMDB...");
-    const creditsResponse = await fetch(
-      `https://api.themoviedb.org/3/movie/${tmdbId}/credits`,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}`,
-          accept: "application/json",
-        },
-      }
-    );
-    const creditsData = await creditsResponse.json();
-
-    // Process cast members and save their profile images
-    const characters = await Promise.all(
-      creditsData.cast.map(async (actor) => {
-        let profilePath = null;
-        if (actor.profile_path) {
-          const profileUrl = `https://image.tmdb.org/t/p/original${actor.profile_path}`;
-          console.log("Downloading profile image for:", actor.character);
-          const profileResponse = await fetch(profileUrl);
-          const profileBuffer = await profileResponse.buffer();
-          
-          const profileFileName = `profiles/${movieSlug}/${tmdbId}/${actor.id}.jpg`;
-          const profileFile = bucket.file(profileFileName);
-          await profileFile.save(profileBuffer);
-          profilePath = profileFileName;
-          console.log("Profile image saved to:", profileFileName);
+    // Only fetch TMDB data if we don't have it
+    if (!tmdbId) {
+      // Get TMDB movie data using IMDB ID
+      console.log("Fetching TMDB data using IMDB ID:", imdbId);
+      const tmdbFindResponse = await fetch(
+        `https://api.themoviedb.org/3/find/${imdbId}?external_source=imdb_id`,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}`,
+            accept: "application/json",
+          },
         }
+      );
+      const tmdbFindData = await tmdbFindResponse.json();
+      
+      if (!tmdbFindData.movie_results || tmdbFindData.movie_results.length === 0) {
+        console.log("Movie not found in TMDB");
+        throw new HttpsError("not-found", "Movie not found in TMDB");
+      }
 
-        return {
-          name: actor.character,
-          profilePath,
-          actorName: actor.name,
-          actorId: actor.id,
-          order: actor.order,
-        };
-      })
-    );
-    console.log("Processed", characters.length, "characters");
+      const tmdbMovie = tmdbFindData.movie_results[0];
+      tmdbId = tmdbMovie.id;
+      console.log("Found TMDB movie:", tmdbMovie.title, "ID:", tmdbId);
+
+      // Save movie poster if available and we don't have it
+      if (tmdbMovie.poster_path && !posterPath) {
+        const posterUrl = `https://image.tmdb.org/t/p/original${tmdbMovie.poster_path}`;
+        console.log("Downloading movie poster from:", posterUrl);
+        const posterResponse = await fetch(posterUrl);
+        const posterBuffer = await posterResponse.buffer();
+        
+        posterPath = `posters/${movieSlug}/${tmdbId}.jpg`;
+        const posterFile = bucket.file(posterPath);
+        await posterFile.save(posterBuffer);
+        console.log("Movie poster saved to:", posterPath);
+      }
+    }
+
+    // Only fetch character data if we don't have it
+    if (!characters) {
+      // Get movie credits to find characters
+      console.log("Fetching movie credits from TMDB...");
+      const creditsResponse = await fetch(
+        `https://api.themoviedb.org/3/movie/${tmdbId}/credits`,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}`,
+            accept: "application/json",
+          },
+        }
+      );
+      const creditsData = await creditsResponse.json();
+
+      // Process cast members and save their profile images
+      characters = await Promise.all(
+        creditsData.cast.map(async (actor) => {
+          let profilePath = null;
+          if (actor.profile_path) {
+            const profileUrl = `https://image.tmdb.org/t/p/original${actor.profile_path}`;
+            console.log("Downloading profile image for:", actor.character);
+            const profileResponse = await fetch(profileUrl);
+            const profileBuffer = await profileResponse.buffer();
+            
+            profilePath = `bot_profiles_pictures/${movieSlug}/${tmdbId}/${actor.id}.jpg`;
+            const profileFile = bucket.file(profilePath);
+            await profileFile.save(profileBuffer);
+            console.log("Profile image saved to:", profilePath);
+          }
+
+          return {
+            name: actor.character,
+            profilePath,
+            actorName: actor.name,
+            actorId: actor.id,
+            order: actor.order,
+          };
+        })
+      );
+      console.log("Processed", characters.length, "characters");
+    }
+
+    // Save movie information to Firestore
+    console.log("Saving movie information to Firestore...");
+    
+    const movieRef = db.collection('movies').doc(imdbId);
+    await movieRef.set({
+      tmdbId,
+      imdbId,
+      title: existingMovieData?.title || selectedMovie.title,
+      posterPath,
+      scriptId,
+      hasScript: true,
+      hasCharacters: true,
+      createdAt: existingMovieData?.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    console.log("Movie information saved to Firestore");
+
+    // Save character bots to Firestore if we just fetched them
+    if (!existingMovieData?.hasCharacters) {
+      console.log("Saving character bots to Firestore...");
+      const botsRef = db.collection('bots');
+      await Promise.all(characters.map(async (character) => {
+        const botId = uuidv4();
+        await botsRef.doc(botId).set({
+          movieId: imdbId,
+          imdbId,
+          tmdbId: tmdbId.toString(),
+          characterName: character.name,
+          actorName: character.actorName,
+          actorId: character.actorId,
+          profilePicture: character.profilePath,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }));
+      console.log("Character bots saved to Firestore");
+    }
+
+    // Update channel's activeMovies
+    console.log("Updating channel's activeMovies...");
+    const channelRef = db.collection('channels').doc(channelId);
+    await channelRef.set({
+      activeMovies: {
+        [imdbId]: {
+          imdbId,
+          title: existingMovieData?.title || selectedMovie.title,
+          posterPath,
+          activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }
+      }
+    }, { merge: true });
+    console.log("Channel activeMovies updated");
+
+    // Create system message announcing the movie characters
+    console.log("Creating system message...");
+    const messageRef = db.collection('messages').doc();
+    await messageRef.set({
+      text: `Added characters from "${existingMovieData?.title || selectedMovie.title}" to the channel! You can now chat with them about the movie.`,
+      sender: {
+        uid: 'system',
+        displayName: 'System',
+        photoURL: null,
+        email: null,
+      },
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      channel: channelId,
+      workspaceId: (await channelRef.get()).data().workspaceId,
+      isSystem: true,
+      movieData: {
+        movieId: tmdbId.toString(),
+        imdbId,
+        title: existingMovieData?.title || selectedMovie.title,
+        posterPath,
+        characters: characters.map(c => ({
+          name: c.name,
+          actorName: c.actorName,
+          profilePath: c.profilePath,
+        })),
+      },
+    });
+    console.log("System message created");
 
     const result = {
       success: true,
       scriptId,
-      title: selectedMovie.title,
-      writer: selectedMovie.writer,
-      subtitle: selectedMovie.subtitle,
-      pdfPath: pdfFileName,
-      vectorCount: docs.length,
+      title: existingMovieData?.title || selectedMovie.title,
+      writer: selectedMovie?.writer,
+      subtitle: selectedMovie?.subtitle,
+      vectorCount: docs?.length || stats.namespaces[`movie-scripts-${scriptId}`]?.recordCount || 0,
       fromCache: false,
       tmdb: {
         id: tmdbId,
