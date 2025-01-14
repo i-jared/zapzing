@@ -76,25 +76,35 @@ export interface UserActivity {
   displayName: string | null;
 }
 
+export interface MovieData {
+  imdbId: string;
+  title: string;
+  posterPath: string;
+  activatedAt: {
+    seconds: number;
+    nanoseconds: number;
+  } | {
+    toDate: () => Date;
+  };
+}
+
+export type ActiveMovies = {
+  [imdbId: string]: MovieData;
+} | undefined;
+
 export interface Channel {
   id: string;
   name: string;
   workspaceId: string;
   createdAt: Date;
-  dm?: string[];  // Array of two user UIDs for DM channels
-  activeMovies?: {
-    [imdbId: string]: {
-      imdbId: string;
-      title: string;
-      posterPath: string;
-      activatedAt: { seconds: number; nanoseconds: number } | { toDate: () => Date };
-    };
-  };
+  dm?: string[];
+  activeMovies?: ActiveMovies;
 }
 
 export interface FirestoreChannel {
   name: string;
   workspaceId: string;
-  createdAt: { seconds: number; nanoseconds: number } | { toDate: () => Date };
-  dm?: string[];  // Array of two user UIDs for DM channels
+  createdAt: any;
+  dm?: string[];
+  activeMovies?: ActiveMovies;
 } 

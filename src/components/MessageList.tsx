@@ -17,7 +17,7 @@ import Picker from "@emoji-mart/react";
 import MessageText from "./MessageText";
 import { auth } from "../firebase";
 import { Message } from "../types/chat";
-
+import { getImagePath } from "../utils/chat";
 
 interface MessageListProps {
   messages: Message[];
@@ -85,7 +85,7 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
       },
     }));
 
-    console.log(messages?.filter(msg => msg.isSystem).length);
+    console.log(messages?.filter((msg) => msg.isSystem).length);
 
     return (
       <div
@@ -174,13 +174,15 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
                       <div className="avatar">
                         {msg.isSystem ? (
                           <div className="w-10 rounded-full">
-
-                            <img src={`url("/assets/favicon.png")`} alt="System" />
+                            <img
+                              src={`url("/assets/favicon.png")`}
+                              alt="System"
+                            />
                           </div>
                         ) : getUserPhotoURL(
-                          msg.sender.uid,
-                          msg.sender.photoURL
-                        ) ? (
+                            msg.sender.uid,
+                            msg.sender.photoURL
+                          ) ? (
                           <div className="w-10 rounded-full">
                             <img
                               src={
@@ -207,18 +209,20 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
                       <div className="flex items-baseline mb-1">
                         <span
                           className={`font-bold ${
-                            msg.isSystem 
+                            msg.isSystem
                               ? "text-info"
                               : msg.sender.uid === auth.currentUser?.uid
                               ? "text-primary"
                               : "text-secondary"
                           }`}
                         >
-                          {msg.isSystem ? "System" : getUserDisplayName(
-                            msg.sender.uid,
-                            msg.sender.email || "",
-                            msg.sender.displayName
-                          )}
+                          {msg.isSystem
+                            ? "System"
+                            : getUserDisplayName(
+                                msg.sender.uid,
+                                msg.sender.email || "",
+                                msg.sender.displayName
+                              )}
                         </span>
                         <time className="text-xs opacity-50 ml-2 text-base-content/50">
                           {formatTime(msg.timestamp)}
@@ -234,36 +238,46 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
                               {msg.movieData.posterPath && (
                                 <div className="max-w-xs">
                                   <img
-                                    src={`https://image.tmdb.org/t/p/w500${msg.movieData.posterPath}`}
+                                    src={getImagePath(msg.movieData.posterPath)}
                                     alt={msg.movieData.title}
                                     className="rounded-lg shadow-lg"
                                   />
                                 </div>
                               )}
-                              {msg.movieData.characters && msg.movieData.characters.length > 0 && (
-                                <div>
-                                  <h4 className="font-semibold mb-2">Characters joining the chat:</h4>
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                    {msg.movieData.characters.map((character, idx) => (
-                                      <div key={idx} className="flex items-center gap-2">
-                                        {character.profilePath && (
-                                          <img
-                                            src={`https://image.tmdb.org/t/p/w92${character.profilePath}`}
-                                            alt={character.name}
-                                            className="w-8 h-8 rounded-full object-cover"
-                                          />
-                                        )}
-                                        <div className="min-w-0">
-                                          <div className="font-medium truncate">{character.name}</div>
-                                          <div className="text-xs text-base-content/70 truncate">
-                                            {character.actorName}
+                              {msg.movieData.characters &&
+                                msg.movieData.characters.length > 0 && (
+                                  <div>
+                                    <h4 className="font-semibold mb-2">
+                                      Characters joining the chat:
+                                    </h4>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                      {msg.movieData.characters.map(
+                                        (character, idx) => (
+                                          <div
+                                            key={idx}
+                                            className="flex items-center gap-2"
+                                          >
+                                            {character.profilePath && (
+                                              <img
+                                                src={getImagePath(character.profilePath)}
+                                                alt={character.name}
+                                                className="w-8 h-8 rounded-full object-cover"
+                                              />
+                                            )}
+                                            <div className="min-w-0">
+                                              <div className="font-medium truncate">
+                                                {character.name}
+                                              </div>
+                                              <div className="text-xs text-base-content/70 truncate">
+                                                {character.actorName}
+                                              </div>
+                                            </div>
                                           </div>
-                                        </div>
-                                      </div>
-                                    ))}
+                                        )
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                )}
                             </div>
                           )}
                           {msg.attachment && (

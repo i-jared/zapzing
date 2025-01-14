@@ -142,6 +142,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           workspaceId: doc.data().workspaceId,
           createdAt: doc.data().createdAt?.toDate() || new Date(),
           dm: doc.data().dm,
+          activeMovies: doc.data().activeMovies,
         }));
         setChannels(channelsData);
         // Select first channel if no channel is selected and there are channels available

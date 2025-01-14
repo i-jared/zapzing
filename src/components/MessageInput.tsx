@@ -5,7 +5,9 @@ import Picker from '@emoji-mart/react';
 import { Channel } from '../types/chat';
 import StatusModal from './StatusModal';
 import MovieCharactersModal from './MovieCharactersModal';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
+import { doc, updateDoc } from 'firebase/firestore';
+import { getImagePath } from '../utils/chat';
 
 interface MessageInputProps {
   message: string;
@@ -244,6 +246,25 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
   };
 
+  const handleRemoveMovie = async (movieId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!channel) return;
+
+    try {
+      const channelRef = doc(db, 'channels', channel.id);
+      const updatedMovies = { ...channel.activeMovies };
+      delete updatedMovies[movieId];
+      
+      await updateDoc(channelRef, {
+        activeMovies: updatedMovies
+      });
+    } catch (error) {
+      console.error('Error removing movie:', error);
+    }
+  };
+
+  console.log(channel?.activeMovies);
+
   return (
     <div className="absolute bottom-0 left-0 right-0">
       <div className="p-4">
@@ -352,25 +373,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
                     <MessageCircle className="w-4 h-4 text-base-content/70 hover:text-base-content" />
                   </button>
                   <div className="flex items-center gap-2">
-                    {channel?.activeMovies && Object.values(channel.activeMovies).map((movie) => (
-                      <div key={movie.imdbId} className="relative group">
-                        <img 
-                          src={movie.posterPath} 
-                          alt={movie.title} 
-                          className="w-6 h-6 rounded object-cover"
-                          title={movie.title}
-                        />
-                        <button 
-                          className="absolute -top-1 -right-1 w-4 h-4 bg-base-300 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // TODO: Add function to remove movie from channel
-                          }}
-                        >
-                          <X className="w-3 h-3 text-base-content/70" />
-                        </button>
-                      </div>
-                    ))}
                     <button 
                       type="button" 
                       className="btn btn-ghost btn-sm btn-square relative"
@@ -383,6 +385,22 @@ const MessageInput: React.FC<MessageInputProps> = ({
                         <Film className="w-4 h-4 text-base-content/70 hover:text-base-content" />
                       )}
                     </button>
+                    {channel?.activeMovies && Object.values(channel.activeMovies).map((movie) => (
+                      <div key={movie.imdbId} className="relative group">
+                        <img 
+                          src={getImagePath(movie.posterPath)} 
+                          alt={movie.title} 
+                          className="w-6 h-6 rounded object-cover"
+                          title={movie.title}
+                        />
+                        <button 
+                          className="absolute -top-1 -right-1 w-4 h-4 bg-base-300 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => handleRemoveMovie(movie.imdbId, e)}
+                        >
+                          <X className="w-3 h-3 text-base-content/70" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
                 <span className="text-xs text-base-content/50">Press Enter to send</span>

@@ -216,3 +216,7 @@ export const hasUnseenMessages = (
 
   return lastMessageDate > lastSeenDate;
 };
+
+export const getImagePath = (path: string) => {
+  return `https://firebasestorage.googleapis.com/v0/b/zappzingg.firebasestorage.app/o/${encodeURIComponent(path)}?alt=media`;
+};

@@ -44,6 +44,8 @@ import {
   ChannelMember,
   Channel,
   FirestoreChannel,
+  MovieData,
+  ActiveMovies,
 } from "../types/chat";
 import {
   formatTime,
@@ -227,12 +229,14 @@ const MainPage: React.FC = () => {
           "toDate" in data.createdAt
             ? data.createdAt.toDate()
             : new Date(data.createdAt.seconds * 1000);
+        console.log(data.activeMovies);
         setSelectedChannel({
           id: generalChannel.id,
           name: data.name,
           workspaceId: data.workspaceId,
           createdAt,
           dm: data.dm,
+          activeMovies: data.activeMovies,
         });
       }
     });
@@ -545,10 +549,12 @@ const MainPage: React.FC = () => {
           workspaceId,
           createdAt: serverTimestamp(),
           dm: selectedChannel.dm,
+          activeMovies: selectedChannel.activeMovies,
         });
         channelId = dmDoc.id;
 
         // Update the selected channel with the real channel ID
+        console.log(selectedChannel.activeMovies);
         setSelectedChannel({
           ...selectedChannel,
           id: channelId,
@@ -1084,6 +1090,7 @@ const MainPage: React.FC = () => {
     }
     
     // Only set the selected channel after lastSeen is updated
+    console.log(channel?.activeMovies);
     setSelectedChannel(channel);
   };
 
@@ -1126,6 +1133,7 @@ const MainPage: React.FC = () => {
                 workspaceId: data.workspaceId,
                 createdAt,
                 dm: data.dm,
+                activeMovies: data.activeMovies,
               };
               await handleChannelSelect(channel);
             }
@@ -1137,6 +1145,7 @@ const MainPage: React.FC = () => {
               workspaceId: data.workspaceId,
               createdAt,
               dm: data.dm,
+              activeMovies: data.activeMovies,
             };
             await handleChannelSelect(channel);
           }
