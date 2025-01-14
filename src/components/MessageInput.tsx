@@ -263,8 +263,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
   };
 
-  console.log(channel?.activeMovies);
-
   return (
     <div className="absolute bottom-0 left-0 right-0">
       <div className="p-4">

@@ -229,7 +229,6 @@ const MainPage: React.FC = () => {
           "toDate" in data.createdAt
             ? data.createdAt.toDate()
             : new Date(data.createdAt.seconds * 1000);
-        console.log(data.activeMovies);
         setSelectedChannel({
           id: generalChannel.id,
           name: data.name,
@@ -554,7 +553,6 @@ const MainPage: React.FC = () => {
         channelId = dmDoc.id;
 
         // Update the selected channel with the real channel ID
-        console.log(selectedChannel.activeMovies);
         setSelectedChannel({
           ...selectedChannel,
           id: channelId,
@@ -1090,7 +1088,6 @@ const MainPage: React.FC = () => {
     }
     
     // Only set the selected channel after lastSeen is updated
-    console.log(channel?.activeMovies);
     setSelectedChannel(channel);
   };
 

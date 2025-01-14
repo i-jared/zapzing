@@ -85,8 +85,6 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
       },
     }));
 
-    console.log(messages?.filter((msg) => msg.isSystem).length);
-
     return (
       <div
         className={`z-0 p-4 min-h-full ${

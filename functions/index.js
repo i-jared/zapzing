@@ -33,6 +33,12 @@ const { Client } = require("langsmith");
 const { PineconeStore } = require("@langchain/pinecone");
 const { Document } = require("langchain/document");
 const { v4: uuidv4 } = require("uuid");
+const { ChatOpenAI } = require("@langchain/openai");
+const {
+  ChatPromptTemplate,
+  HumanMessagePromptTemplate,
+} = require("@langchain/core/prompts");
+const { StringOutputParser } = require("@langchain/core/output_parsers");
 
 admin.initializeApp();
 
@@ -306,7 +312,7 @@ exports.searchMovies = onCall(async (request) => {
 // Function to get movie script from Scripts.com and index it in Pinecone
 exports.getMovieScript = onCall(async (request) => {
   console.log("Starting getMovieScript function...");
-  
+
   // Initialize LangSmith client for tracking
   const langsmith = new Client({
     apiKey: process.env.LANGSMITH_API_KEY,
@@ -339,16 +345,22 @@ exports.getMovieScript = onCall(async (request) => {
   try {
     const { movieTitle, imdbId, channelId } = request.data;
     if (!movieTitle || !imdbId || !channelId) {
-      throw new HttpsError("invalid-argument", "Movie title, IMDB ID, and channel ID are required");
+      throw new HttpsError(
+        "invalid-argument",
+        "Movie title, IMDB ID, and channel ID are required"
+      );
     }
     console.log("Processing request for movie:", movieTitle);
+
+    // Initialize vector count
+    let vectorCount = 0;
 
     // Check Firestore first for existing movie data
     const db = getFirestore();
     console.log("Checking Firestore for existing movie data...");
-    
+
     // Get movie by IMDB ID
-    const movieDoc = await db.collection('movies').doc(imdbId).get();
+    const movieDoc = await db.collection("movies").doc(imdbId).get();
     let existingMovieData = null;
     let tmdbId = null;
     let posterPath = null;
@@ -365,11 +377,12 @@ exports.getMovieScript = onCall(async (request) => {
         console.log("Movie already has script and characters");
 
         // Get existing bots
-        const botsSnapshot = await db.collection('bots')
-          .where('movieId', '==', imdbId)
+        const botsSnapshot = await db
+          .collection("bots")
+          .where("movieId", "==", imdbId)
           .get();
-        
-        characters = botsSnapshot.docs.map(doc => ({
+
+        characters = botsSnapshot.docs.map((doc) => ({
           name: doc.data().characterName,
           profilePath: doc.data().profilePicture,
           actorName: doc.data().actorName,
@@ -378,23 +391,26 @@ exports.getMovieScript = onCall(async (request) => {
 
         // Update channel's activeMovies
         console.log("Updating channel's activeMovies...");
-        const channelRef = db.collection('channels').doc(channelId);
-        await channelRef.set({
-          activeMovies: {
-            [imdbId]: {
-              imdbId,
-              title: existingMovieData.title,
-              activatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            }
-          }
-        }, { merge: true });
+        const channelRef = db.collection("channels").doc(channelId);
+        await channelRef.set(
+          {
+            activeMovies: {
+              [imdbId]: {
+                imdbId,
+                title: existingMovieData.title,
+                activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              },
+            },
+          },
+          { merge: true }
+        );
         console.log("Channel activeMovies updated");
 
         const result = {
           success: true,
           scriptId: existingMovieData.scriptId,
           title: existingMovieData.title,
-          vectorCount: stats.namespaces[`movie-scripts-${existingMovieData.scriptId}`]?.recordCount || 0,
+          vectorCount: vectorCount,
           fromCache: true,
           tmdb: {
             id: tmdbId,
@@ -417,11 +433,12 @@ exports.getMovieScript = onCall(async (request) => {
       // If we have characters but no script
       if (existingMovieData.hasCharacters) {
         console.log("Using existing character data");
-        const botsSnapshot = await db.collection('bots')
-          .where('movieId', '==', imdbId)
+        const botsSnapshot = await db
+          .collection("bots")
+          .where("movieId", "==", imdbId)
           .get();
-        
-        characters = botsSnapshot.docs.map(doc => ({
+
+        characters = botsSnapshot.docs.map((doc) => ({
           name: doc.data().characterName,
           profilePath: doc.data().profilePicture,
           actorName: doc.data().actorName,
@@ -461,7 +478,10 @@ exports.getMovieScript = onCall(async (request) => {
           throw new HttpsError("not-found", "No script found for this movie");
         }
         selectedMovie = searchData.result[0];
-        console.log(`Found ${searchData.result.length} scripts, selecting first one:`, selectedMovie.title);
+        console.log(
+          `Found ${searchData.result.length} scripts, selecting first one:`,
+          selectedMovie.title
+        );
       } else if (searchData.result) {
         selectedMovie = searchData.result;
         console.log("Found single script match:", selectedMovie.title);
@@ -487,8 +507,15 @@ exports.getMovieScript = onCall(async (request) => {
 
       // Check if namespace already exists
       const stats = await pineconeIndex.describeIndexStats();
-      const namespace = `movie-scripts-${scriptId}`;
-      console.log("Checking if script already exists in Pinecone namespace:", namespace);
+      const namespace = `movie-scripts-${imdbId}`;
+      console.log(
+        "Checking if script already exists in Pinecone namespace:",
+        namespace
+      );
+
+      if (stats.namespaces && stats.namespaces[namespace]) {
+        vectorCount = stats.namespaces[namespace].recordCount || 0;
+      }
 
       if (!(stats.namespaces && stats.namespaces[namespace])) {
         console.log("Script not found in Pinecone, proceeding with download");
@@ -509,7 +536,10 @@ exports.getMovieScript = onCall(async (request) => {
         // Parse PDF to text using pdf-parse
         console.log("Parsing PDF to text...");
         const pdfData = await pdf(pdfBuffer);
-        console.log("PDF parsed successfully, text length:", pdfData.text.length);
+        console.log(
+          "PDF parsed successfully, text length:",
+          pdfData.text.length
+        );
 
         // Create document with metadata
         const doc = new Document({
@@ -533,6 +563,9 @@ exports.getMovieScript = onCall(async (request) => {
         // Split the document into chunks
         const docs = await splitter.splitDocuments([doc]);
         console.log("Text split into", docs.length, "chunks");
+
+        // Set vector count to number of chunks
+        vectorCount = docs.length;
 
         // Create PineconeStore with the documents using LangChain
         console.log("Uploading chunks to Pinecone...");
@@ -564,8 +597,11 @@ exports.getMovieScript = onCall(async (request) => {
         }
       );
       const tmdbFindData = await tmdbFindResponse.json();
-      
-      if (!tmdbFindData.movie_results || tmdbFindData.movie_results.length === 0) {
+
+      if (
+        !tmdbFindData.movie_results ||
+        tmdbFindData.movie_results.length === 0
+      ) {
         console.log("Movie not found in TMDB");
         throw new HttpsError("not-found", "Movie not found in TMDB");
       }
@@ -580,7 +616,7 @@ exports.getMovieScript = onCall(async (request) => {
         console.log("Downloading movie poster from:", posterUrl);
         const posterResponse = await fetch(posterUrl);
         const posterBuffer = await posterResponse.buffer();
-        
+
         posterPath = `posters/${movieSlug}/${tmdbId}.jpg`;
         const posterFile = bucket.file(posterPath);
         await posterFile.save(posterBuffer);
@@ -612,7 +648,7 @@ exports.getMovieScript = onCall(async (request) => {
             console.log("Downloading profile image for:", actor.character);
             const profileResponse = await fetch(profileUrl);
             const profileBuffer = await profileResponse.buffer();
-            
+
             profilePath = `bot_profiles_pictures/${movieSlug}/${tmdbId}/${actor.id}.jpg`;
             const profileFile = bucket.file(profilePath);
             await profileFile.save(profileBuffer);
@@ -633,65 +669,80 @@ exports.getMovieScript = onCall(async (request) => {
 
     // Save movie information to Firestore
     console.log("Saving movie information to Firestore...");
-    
-    const movieRef = db.collection('movies').doc(imdbId);
-    await movieRef.set({
-      tmdbId,
-      imdbId,
-      title: existingMovieData?.title || selectedMovie.title,
-      posterPath,
-      scriptId,
-      hasScript: true,
-      hasCharacters: true,
-      createdAt: existingMovieData?.createdAt || admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
+
+    const movieRef = db.collection("movies").doc(imdbId);
+    await movieRef.set(
+      {
+        tmdbId,
+        imdbId,
+        title: existingMovieData?.title || selectedMovie.title,
+        posterPath,
+        scriptId,
+        hasScript: true,
+        hasCharacters: true,
+        createdAt:
+          existingMovieData?.createdAt ||
+          admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
     console.log("Movie information saved to Firestore");
 
     // Save character bots to Firestore if we just fetched them
     if (!existingMovieData?.hasCharacters) {
       console.log("Saving character bots to Firestore...");
-      const botsRef = db.collection('bots');
-      await Promise.all(characters.map(async (character) => {
-        const botId = uuidv4();
-        await botsRef.doc(botId).set({
-          movieId: imdbId,
-          imdbId,
-          tmdbId: tmdbId.toString(),
-          characterName: character.name,
-          actorName: character.actorName,
-          actorId: character.actorId,
-          profilePicture: character.profilePath,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-      }));
+      const botsRef = db.collection("bots");
+      await Promise.all(
+        characters.map(async (character) => {
+          const botId = uuidv4();
+          await botsRef.doc(botId).set(
+            {
+              movieId: imdbId,
+              imdbId,
+              tmdbId: tmdbId.toString(),
+              characterName: character.name,
+              actorName: character.actorName,
+              actorId: character.actorId,
+              profilePicture: character.profilePath,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+        })
+      );
       console.log("Character bots saved to Firestore");
     }
 
     // Update channel's activeMovies
     console.log("Updating channel's activeMovies...");
-    const channelRef = db.collection('channels').doc(channelId);
-    await channelRef.set({
-      activeMovies: {
-        [imdbId]: {
-          imdbId,
-          title: existingMovieData?.title || selectedMovie.title,
-          posterPath,
-          activatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }
-      }
-    }, { merge: true });
+    const channelRef = db.collection("channels").doc(channelId);
+    await channelRef.set(
+      {
+        activeMovies: {
+          [imdbId]: {
+            imdbId,
+            title: existingMovieData?.title || selectedMovie.title,
+            posterPath,
+            activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+        },
+      },
+      { merge: true }
+    );
     console.log("Channel activeMovies updated");
 
     // Create system message announcing the movie characters
     console.log("Creating system message...");
-    const messageRef = db.collection('messages').doc();
+    const messageRef = db.collection("messages").doc();
     await messageRef.set({
-      text: `Added characters from "${existingMovieData?.title || selectedMovie.title}" to the channel! You can now chat with them about the movie.`,
+      text: `Added characters from "${
+        existingMovieData?.title || selectedMovie.title
+      }" to the channel! You can now chat with them about the movie.`,
       sender: {
-        uid: 'system',
-        displayName: 'System',
+        uid: "system",
+        displayName: "System",
         photoURL: null,
         email: null,
       },
@@ -704,7 +755,7 @@ exports.getMovieScript = onCall(async (request) => {
         imdbId,
         title: existingMovieData?.title || selectedMovie.title,
         posterPath,
-        characters: characters.map(c => ({
+        characters: characters.map((c) => ({
           name: c.name,
           actorName: c.actorName,
           profilePath: c.profilePath,
@@ -719,7 +770,7 @@ exports.getMovieScript = onCall(async (request) => {
       title: existingMovieData?.title || selectedMovie.title,
       writer: selectedMovie?.writer,
       subtitle: selectedMovie?.subtitle,
-      vectorCount: stats.namespaces[`movie-scripts-${scriptId}`]?.recordCount || 0,
+      vectorCount,
       fromCache: false,
       tmdb: {
         id: tmdbId,
@@ -751,3 +802,325 @@ exports.getMovieScript = onCall(async (request) => {
     throw new HttpsError("internal", error.message);
   }
 });
+
+exports.determineCharacterResponse = onDocumentCreated(
+  "messages/{messageId}",
+  async (event) => {
+    // Initialize LangSmith client for tracking
+    const langsmith = new Client({
+      apiKey: process.env.LANGSMITH_API_KEY,
+      apiUrl: process.env.LANGSMITH_API_URL,
+    });
+    console.log("LangSmith client initialized");
+
+    // Start LangSmith run
+    const runId = uuidv4();
+    await langsmith.createRun({
+      id: runId,
+      name: "determine_character_response",
+      run_type: "chain",
+      inputs: { messageId: event.params.messageId },
+    });
+
+    try {
+      const snapshot = event.data;
+      if (!snapshot) {
+        console.log("No snapshot data found");
+        await langsmith.updateRun(runId, {
+          error: "No snapshot data found",
+          status: "failed",
+          end_time: new Date().toISOString(),
+        });
+        return null;
+      }
+
+      const messageData = snapshot.data();
+      if (!messageData || messageData.sender.uid === "system") {
+        console.log("No message data found or system message");
+        await langsmith.updateRun(runId, {
+          error: "No message data or system message",
+          status: "failed",
+          end_time: new Date().toISOString(),
+        });
+        return null;
+      }
+
+      // Get the channel document to check for active movies
+      const channelDoc = await getFirestore()
+        .collection("channels")
+        .doc(messageData.channel)
+        .get();
+
+      if (!channelDoc.exists) {
+        console.log(`Channel ${messageData.channel} does not exist`);
+        await langsmith.updateRun(runId, {
+          error: "Channel does not exist",
+          status: "failed",
+          end_time: new Date().toISOString(),
+        });
+        return null;
+      }
+
+      const channelData = channelDoc.data();
+      if (
+        !channelData.activeMovies ||
+        Object.keys(channelData.activeMovies).length === 0
+      ) {
+        console.log("No active movies in channel");
+        await langsmith.updateRun(runId, {
+          error: "No active movies in channel",
+          status: "failed",
+          end_time: new Date().toISOString(),
+        });
+        return null;
+      }
+
+      // Get last 10 messages from the channel for context
+      const messagesSnapshot = await getFirestore()
+        .collection("messages")
+        .where("channel", "==", messageData.channel)
+        .orderBy("timestamp", "desc")
+        .limit(10)
+        .get();
+
+      const recentMessages = messagesSnapshot.docs
+        .map((doc) => doc.data())
+        .reverse()
+        .map((msg) => ({
+          text: msg.text,
+          sender: msg.sender.displayName || msg.sender.email || "Unknown",
+          isSystem: msg.isSystem || false,
+        }));
+
+      // Get all characters from the active movies
+      const characters = [];
+      const movieContexts = [];
+
+      for (const [imdbId, movieData] of Object.entries(
+        channelData.activeMovies
+      )) {
+        const movieDoc = await getFirestore()
+          .collection("movies")
+          .doc(imdbId)
+          .get();
+
+        if (!movieDoc.exists) continue;
+
+        const movieData = movieDoc.data();
+        const scriptId = movieData.scriptId;
+
+        // Get movie context from Pinecone
+        const pinecone = new Pinecone({
+          apiKey: process.env.PINECONE_API_KEY,
+        });
+        const pineconeIndex = pinecone
+          .Index(process.env.PINECONE_INDEX)
+          .namespace(`movie-scripts-${imdbId}`);
+
+        // Create embeddings for the message
+        const embeddings = new OpenAIEmbeddings({
+          openAIApiKey: process.env.OPENAI_API_KEY,
+        });
+        const queryEmbedding = await embeddings.embedQuery(messageData.text);
+
+        // Query Pinecone for relevant context
+        const queryResponse = await pineconeIndex.query({
+          vector: queryEmbedding,
+          topK: 3,
+          includeMetadata: true,
+        });
+
+        if (queryResponse.matches.length > 0) {
+          movieContexts.push({
+            movieTitle: movieData.title,
+            context: queryResponse.matches
+              .map((match) => match.metadata.text)
+              .join("\n"),
+          });
+        }
+
+        const botsSnapshot = await getFirestore()
+          .collection("bots")
+          .where("movieId", "==", imdbId)
+          .get();
+
+        botsSnapshot.forEach((doc) => {
+          const botData = doc.data();
+          characters.push({
+            id: doc.id,
+            name: botData.characterName,
+            movieTitle: movieDoc.data().title,
+            movieId: imdbId,
+            profilePicture: botData.profilePicture,
+          });
+        });
+      }
+
+      if (characters.length === 0) {
+        console.log("No characters found");
+        await langsmith.updateRun(runId, {
+          error: "No characters found",
+          status: "failed",
+          end_time: new Date().toISOString(),
+        });
+        return null;
+      }
+
+      // Initialize ChatOpenAI from LangChain
+      const model = new ChatOpenAI({
+        modelName: "gpt-4",
+        temperature: 0.7,
+        openAIApiKey: process.env.OPENAI_API_KEY,
+      });
+
+      // Create character selection prompt template
+      const characterSelectionPrompt = ChatPromptTemplate.fromMessages([
+        HumanMessagePromptTemplate.fromTemplate(`Given the following message in a chat: "{message}"
+
+And these movie characters who could potentially respond:
+{characterList}
+
+Recent chat context:
+{chatHistory}
+
+Determine which character would be most appropriate to respond to this message, if any. Consider:
+1. The message content and context
+2. The character's personality and role in their movie
+3. Whether the message warrants any response at all
+
+Output ONLY the character's name, or "none" if no character should respond. Do not include any other text or explanation.`),
+      ]);
+
+      // Create character selection chain
+      const characterSelectionChain = characterSelectionPrompt
+        .pipe(model)
+        .pipe(new StringOutputParser());
+
+      // Execute character selection chain
+      const characterToRespond = await characterSelectionChain.invoke({
+        message: messageData.text,
+        characterList: characters
+          .map((c) => `- ${c.name} from "${c.movieTitle}"`)
+          .join("\n"),
+        chatHistory: recentMessages
+          .map((msg) => `${msg.sender}: ${msg.text}`)
+          .join("\n"),
+      });
+
+      console.log("Character to respond:", characterToRespond);
+
+      if (characterToRespond === "none") {
+        console.log("No character selected to respond");
+        await langsmith.updateRun(runId, {
+          outputs: { characterToRespond: "none" },
+          status: "completed",
+          end_time: new Date().toISOString(),
+        });
+        return null;
+      }
+
+      // Find the selected character's data
+      const selectedCharacter = characters.find(
+        (c) => c.name === characterToRespond
+      );
+      if (!selectedCharacter) {
+        console.log("Selected character not found in available characters");
+        await langsmith.updateRun(runId, {
+          error: "Selected character not found",
+          status: "failed",
+          end_time: new Date().toISOString(),
+        });
+        return null;
+      }
+
+      // Get relevant movie context
+      const relevantContext = movieContexts.find(
+        (c) => c.movieTitle === selectedCharacter.movieTitle
+      );
+
+      // Create response generation prompt template
+      const responsePrompt = ChatPromptTemplate.fromMessages([
+        HumanMessagePromptTemplate.fromTemplate(`You are {character} from "{movie}". 
+      
+Recent chat context:
+{chatHistory}
+
+{movieContext}
+
+Respond to the message: "{message}"
+
+Write a response that:
+1. Matches your character's personality, speech patterns, and knowledge
+2. References the movie context when relevant
+3. Maintains a natural, conversational tone
+4. Is concise (1-3 sentences)
+
+Output ONLY your response message, no other text or explanation.`),
+      ]);
+
+      // Create response generation chain
+      const responseChain = responsePrompt
+        .pipe(model.bind({ temperature: 0.9 }))
+        .pipe(new StringOutputParser());
+
+      // Execute response generation chain
+      const botResponse = await responseChain.invoke({
+        character: characterToRespond,
+        movie: selectedCharacter.movieTitle,
+        chatHistory: recentMessages
+          .map((msg) => `${msg.sender}: ${msg.text}`)
+          .join("\n"),
+        movieContext: relevantContext
+          ? `Relevant context from your movie:\n${relevantContext.context}`
+          : "",
+        message: messageData.text,
+      });
+
+      console.log("Bot response:", botResponse);
+
+      // Add the bot's response to Firestore
+      const botMessageRef = getFirestore().collection("messages").doc();
+      await botMessageRef.set({
+        text: botResponse,
+        sender: {
+          uid: selectedCharacter.id,
+          displayName: selectedCharacter.name,
+          photoURL: selectedCharacter.profilePicture || null,
+          email: null,
+        },
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        channel: messageData.channel,
+        workspaceId: channelData.workspaceId,
+        isBot: true,
+      });
+
+      // End LangSmith run with success
+      await langsmith.updateRun(runId, {
+        outputs: {
+          characterToRespond,
+          botResponse,
+          movieContext: relevantContext?.context || null,
+        },
+        status: "completed",
+        end_time: new Date().toISOString(),
+      });
+
+      return {
+        success: true,
+        character: characterToRespond,
+        response: botResponse,
+      };
+    } catch (error) {
+      console.error("Error in determineCharacterResponse:", error);
+
+      // End LangSmith run with error
+      await langsmith.updateRun(runId, {
+        error: error.message,
+        status: "failed",
+        end_time: new Date().toISOString(),
+      });
+
+      return null;
+    }
+  }
+);

@@ -452,7 +452,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         )
                           ? "font-bold"
                           : ""
-                      }`}
+                      } truncate max-w-[160px] inline-block`}
                     >
                       {channel.name}
                     </span>
@@ -620,7 +620,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                           : ""
                       } group relative`}
                     >
-                      {member.displayName || member.email}
+                      <span className="truncate max-w-[160px] inline-block">
+                        {member.displayName || member.email}
+                      </span>
                       {usersCache[member.uid]?.status && (
                         <div className="absolute left-0 -top-12 scale-0 transition-all rounded bg-base-300 p-2 text-sm group-hover:scale-100 whitespace-nowrap border border-base-content/10 before:content-[''] before:absolute before:left-3 before:top-full before:border-8 before:border-x-transparent before:border-b-transparent before:border-t-base-300">
                           {usersCache[member.uid].status}
