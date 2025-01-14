@@ -328,7 +328,7 @@ exports.getMovieScript = onCall(async (request) => {
 
   // Start LangSmith run with required run_type
   const runId = uuidv4();
-  const run = await langsmith.createRun({
+  await langsmith.createRun({
     id: runId,
     name: "get_movie_script",
     run_type: "embedding",
@@ -337,9 +337,9 @@ exports.getMovieScript = onCall(async (request) => {
   console.log("LangSmith run created with ID:", runId);
 
   try {
-    const { movieTitle } = request.data;
-    if (!movieTitle) {
-      throw new HttpsError("invalid-argument", "Movie title is required");
+    const { movieTitle, imdbId } = request.data;
+    if (!movieTitle || !imdbId) {
+      throw new HttpsError("invalid-argument", "Movie title and IMDB ID are required");
     }
     console.log("Processing request for movie:", movieTitle);
 
@@ -472,6 +472,84 @@ exports.getMovieScript = onCall(async (request) => {
     });
     console.log("Chunks successfully uploaded to Pinecone");
 
+    // Get TMDB movie data using IMDB ID
+    console.log("Fetching TMDB data using IMDB ID:", imdbId);
+    const tmdbFindResponse = await fetch(
+      `https://api.themoviedb.org/3/find/${imdbId}?external_source=imdb_id`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}`,
+          accept: "application/json",
+        },
+      }
+    );
+    const tmdbFindData = await tmdbFindResponse.json();
+    
+    if (!tmdbFindData.movie_results || tmdbFindData.movie_results.length === 0) {
+      console.log("Movie not found in TMDB");
+      throw new HttpsError("not-found", "Movie not found in TMDB");
+    }
+
+    const tmdbMovie = tmdbFindData.movie_results[0];
+    const tmdbId = tmdbMovie.id;
+    console.log("Found TMDB movie:", tmdbMovie.title, "ID:", tmdbId);
+
+    // Save movie poster if available
+    let posterPath = null;
+    if (tmdbMovie.poster_path) {
+      const posterUrl = `https://image.tmdb.org/t/p/original${tmdbMovie.poster_path}`;
+      console.log("Downloading movie poster from:", posterUrl);
+      const posterResponse = await fetch(posterUrl);
+      const posterBuffer = await posterResponse.buffer();
+      
+      const posterFileName = `posters/${movieSlug}/${tmdbId}.jpg`;
+      const posterFile = bucket.file(posterFileName);
+      await posterFile.save(posterBuffer);
+      posterPath = posterFileName;
+      console.log("Movie poster saved to:", posterFileName);
+    }
+
+    // Get movie credits to find characters
+    console.log("Fetching movie credits from TMDB...");
+    const creditsResponse = await fetch(
+      `https://api.themoviedb.org/3/movie/${tmdbId}/credits`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}`,
+          accept: "application/json",
+        },
+      }
+    );
+    const creditsData = await creditsResponse.json();
+
+    // Process cast members and save their profile images
+    const characters = await Promise.all(
+      creditsData.cast.map(async (actor) => {
+        let profilePath = null;
+        if (actor.profile_path) {
+          const profileUrl = `https://image.tmdb.org/t/p/original${actor.profile_path}`;
+          console.log("Downloading profile image for:", actor.character);
+          const profileResponse = await fetch(profileUrl);
+          const profileBuffer = await profileResponse.buffer();
+          
+          const profileFileName = `profiles/${movieSlug}/${tmdbId}/${actor.id}.jpg`;
+          const profileFile = bucket.file(profileFileName);
+          await profileFile.save(profileBuffer);
+          profilePath = profileFileName;
+          console.log("Profile image saved to:", profileFileName);
+        }
+
+        return {
+          name: actor.character,
+          profilePath,
+          actorName: actor.name,
+          actorId: actor.id,
+          order: actor.order,
+        };
+      })
+    );
+    console.log("Processed", characters.length, "characters");
+
     const result = {
       success: true,
       scriptId,
@@ -481,6 +559,11 @@ exports.getMovieScript = onCall(async (request) => {
       pdfPath: pdfFileName,
       vectorCount: docs.length,
       fromCache: false,
+      tmdb: {
+        id: tmdbId,
+        posterPath,
+        characters,
+      },
     };
 
     // End LangSmith run with success
