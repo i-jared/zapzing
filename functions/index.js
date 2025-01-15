@@ -907,6 +907,75 @@ exports.determineCharacterResponse = onDocumentCreated(
         return null;
       }
 
+      // Check for timed out movies and remove them
+      const now = admin.firestore.Timestamp.now();
+      const FIVE_MINUTES = 5 * 60; // 5 minutes in seconds
+      const timedOutMovies = [];
+      const updatedActiveMovies = { ...channelData.activeMovies };
+      let hasTimedOutMovies = false;
+
+      for (const [imdbId, movieData] of Object.entries(
+        channelData.activeMovies
+      )) {
+        const activatedAt = movieData.activatedAt;
+        const activatedTimestamp = activatedAt.toDate
+          ? activatedAt.toDate()
+          : new Date(activatedAt.seconds * 1000);
+        const elapsedSeconds =
+          (now.toDate().getTime() - activatedTimestamp.getTime()) / 1000;
+
+        if (elapsedSeconds > FIVE_MINUTES) {
+          delete updatedActiveMovies[imdbId];
+          timedOutMovies.push(movieData.title);
+          hasTimedOutMovies = true;
+        }
+      }
+
+      // If we found timed out movies, update the channel and send a system message
+      if (hasTimedOutMovies) {
+        console.log("Found timed out movies:", timedOutMovies);
+
+        // Update channel's activeMovies
+        await getFirestore()
+          .collection("channels")
+          .doc(messageData.channel)
+          .update({
+            activeMovies: updatedActiveMovies,
+          });
+
+        // Send system message about timed out movies
+        const messageRef = getFirestore().collection("messages").doc();
+        await messageRef.set({
+          text: `Movie session${
+            timedOutMovies.length > 1 ? "s" : ""
+          } timed out for: ${timedOutMovies.join(", ")}`,
+          sender: {
+            uid: "system",
+            displayName: "System",
+            photoURL: null,
+            email: null,
+          },
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          channel: messageData.channel,
+          workspaceId: channelData.workspaceId,
+          isSystem: true,
+        });
+
+        // If no active movies left, return
+        if (Object.keys(updatedActiveMovies).length === 0) {
+          console.log("No active movies remaining after timeout check");
+          await langsmith.updateRun(runId, {
+            error: "No active movies remaining after timeout",
+            status: "failed",
+            end_time: new Date().toISOString(),
+          });
+          return null;
+        }
+
+        // Update channelData.activeMovies for subsequent processing
+        channelData.activeMovies = updatedActiveMovies;
+      }
+
       // Get last 10 messages from the channel for context
       const messagesSnapshot = await getFirestore()
         .collection("messages")
@@ -1030,10 +1099,11 @@ Determine which character would be most appropriate to respond to this message, 
 2. The character's personality and role in their movie
 3. Whether the message warrants any response at all
 
-Output ONLY the character's name, or "none" if no character should respond. Do not include any other text or explanation.
-Output the character's name exactly as it is in the list before the colon. Keep in mind that conversations should be short.
-If two characters have responded back and forth for a few messages, do not respond. Don't keep the conversation to just one
-or two characters unless strictly necessary; try to keep everyone involved.`),
+given the above movie and message, give each character in this list a score between 0 and 1 of the probability that they 
+should respond to the message. their names should be exactly as they are in the list before the colon. reply in proper json format and nothing 
+else. Keep in mind that conversations should be short.  If more characters go back and forth, the less likely they are to respond.
+Don't keep the conversation to just one or two characters unless strictly necessary; try to keep everyone involved. 
+Characters from different movies are curious about each other.`),
       ]);
 
       // Create character selection chain
@@ -1042,7 +1112,7 @@ or two characters unless strictly necessary; try to keep everyone involved.`),
         .pipe(new StringOutputParser());
 
       // Execute character selection chain
-      const characterToRespond = await characterSelectionChain.invoke({
+      const characterProbabilities = await characterSelectionChain.invoke({
         message: messageData.text,
         characterList: characters
           .map((c) => `${c.name}: from "${c.movieTitle}"`)
@@ -1052,12 +1122,45 @@ or two characters unless strictly necessary; try to keep everyone involved.`),
           .join("\n"),
       });
 
-      console.log("Character to respond:", characterToRespond);
+      console.log("Character probabilities:", characterProbabilities);
 
-      if (characterToRespond === "none") {
-        console.log("No character selected to respond");
+      // Parse the JSON response
+      let probabilities;
+      try {
+        probabilities = JSON.parse(characterProbabilities);
+      } catch (error) {
+        console.error("Error parsing character probabilities:", error);
         await langsmith.updateRun(runId, {
-          outputs: { characterToRespond: "none" },
+          error: "Invalid probability JSON format",
+          status: "failed",
+          end_time: new Date().toISOString(),
+        });
+        return null;
+      }
+
+      // Find the character with the highest probability
+      let highestProb = 0;
+      let characterToRespond = null;
+
+      for (const [name, probability] of Object.entries(probabilities)) {
+        if (probability > highestProb) {
+          highestProb = probability;
+          characterToRespond = name;
+        }
+      }
+
+      console.log(
+        "Highest probability character:",
+        characterToRespond,
+        "with probability:",
+        highestProb
+      );
+
+      // If no character has a probability above 0.8, return
+      if (highestProb < 0.8 || !characterToRespond) {
+        console.log("No character had high enough probability to respond");
+        await langsmith.updateRun(runId, {
+          outputs: { probabilities, highestProb, characterToRespond: null },
           status: "completed",
           end_time: new Date().toISOString(),
         });
@@ -1101,7 +1204,9 @@ Write a response that:
 3. Is concise (1-3 sentences)
 4. Don't be overly kind or friendly. Match the tone of the movie and character.
 
-Output ONLY your response message, no other text or explanation.`),
+Output ONLY your response message, no other text or explanation.
+Characters from different movies are initially curious about each other and will respond to each other.
+`),
       ]);
 
       // Create response generation chain
