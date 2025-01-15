@@ -397,6 +397,7 @@ exports.getMovieScript = onCall(async (request) => {
             activeMovies: {
               [imdbId]: {
                 imdbId,
+                posterPath,
                 title: existingMovieData.title,
                 activatedAt: admin.firestore.FieldValue.serverTimestamp(),
               },
@@ -405,6 +406,35 @@ exports.getMovieScript = onCall(async (request) => {
           { merge: true }
         );
         console.log("Channel activeMovies updated");
+
+        // Create system message announcing the movie characters
+        console.log("Creating system message...");
+        const messageRef = db.collection("messages").doc();
+        await messageRef.set({
+          text: `Added characters from "${existingMovieData.title}" to the channel! You can now chat with them about the movie.`,
+          sender: {
+            uid: "system",
+            displayName: "System",
+            photoURL: null,
+            email: null,
+          },
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          channel: channelId,
+          workspaceId: (await channelRef.get()).data().workspaceId,
+          isSystem: true,
+          movieData: {
+            movieId: tmdbId.toString(),
+            imdbId,
+            title: existingMovieData.title,
+            posterPath,
+            characters: characters.map((c) => ({
+              name: c.name,
+              actorName: c.actorName,
+              profilePath: c.profilePath,
+            })),
+          },
+        });
+        console.log("System message created");
 
         const result = {
           success: true,
@@ -806,7 +836,7 @@ exports.getMovieScript = onCall(async (request) => {
 exports.determineCharacterResponse = onDocumentCreated(
   "messages/{messageId}",
   async (event) => {
-    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     // Initialize LangSmith client for tracking
     const langsmith = new Client({
@@ -925,9 +955,13 @@ exports.determineCharacterResponse = onDocumentCreated(
         });
 
         // Create a context string that includes recent messages and the current message
-        const contextString = recentMessages
-          .map(msg => `${msg.sender}: ${msg.text}`)
-          .join("\n") + `\n${messageData.sender.displayName || messageData.sender.email || 'Unknown'}: ${messageData.text}`;
+        const contextString =
+          recentMessages.map((msg) => `${msg.sender}: ${msg.text}`).join("\n") +
+          `\n${
+            messageData.sender.displayName ||
+            messageData.sender.email ||
+            "Unknown"
+          }: ${messageData.text}`;
 
         const queryEmbedding = await embeddings.embedQuery(contextString);
 

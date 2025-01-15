@@ -236,12 +236,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
   };
 
   const handleMovieCharactersClick = () => {
-    setIsProcessingMovie(true); // Set loading state
     const modal = document.getElementById('movie-characters-modal') as HTMLDialogElement;
     if (modal) {
-      modal.addEventListener('close', () => {
-        setIsProcessingMovie(false); // Clear loading state when modal is closed
-      }, { once: true });
       modal.showModal();
     }
   };
@@ -262,6 +258,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       console.error('Error removing movie:', error);
     }
   };
+  console.log('isProcessingMovie', isProcessingMovie);
 
   return (
     <div className="absolute bottom-0 left-0 right-0">
@@ -414,7 +411,10 @@ const MessageInput: React.FC<MessageInputProps> = ({
             userId={auth.currentUser.uid} 
             currentStatus={currentStatus || null}
           />
-          {channel && <MovieCharactersModal selectedChannel={channel} />}
+          {channel && <MovieCharactersModal 
+            selectedChannel={channel} 
+            onProcessingChange={setIsProcessingMovie}
+          />}
         </>
       )}
     </div>

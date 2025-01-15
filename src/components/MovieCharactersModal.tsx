@@ -12,13 +12,14 @@ interface MovieResult {
 
 interface MovieCharactersModalProps {
   selectedChannel: Channel;
+  onProcessingChange?: (boolean) => void;
 }
 
-const MovieCharactersModal: React.FC<MovieCharactersModalProps> = ({ selectedChannel }) => {
+const MovieCharactersModal: React.FC<MovieCharactersModalProps> = ({ selectedChannel, onProcessingChange }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<MovieResult[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
   const functions = getFunctions(app);
 
@@ -54,15 +55,17 @@ const MovieCharactersModal: React.FC<MovieCharactersModalProps> = ({ selectedCha
 
   const handleMovieSelect = async (movie: MovieResult) => {
     try {
+      setIsLoading(true);
+      onProcessingChange?.(true);
       handleClose();
-      setIsProcessing(true);
       const getMovieScript = httpsCallable(functions, 'getMovieScript');
       const result = await getMovieScript({ movieTitle: movie.title, imdbId: movie.imdbId, channelId: selectedChannel.id });
       console.log('Script processed:', result.data);
     } catch (error) {
       console.error('Error processing movie script:', error);
-    } finally {
-      setIsProcessing(false);
+      setIsLoading(false);
+      onProcessingChange?.(false);
+      // Optionally show an error message to the user here
     }
   };
 
@@ -73,6 +76,7 @@ const MovieCharactersModal: React.FC<MovieCharactersModalProps> = ({ selectedCha
   const handleClose = () => {
     setSearchQuery('');
     setSearchResults([]);
+    setIsLoading(false);
     const modal = document.getElementById('movie-characters-modal') as HTMLDialogElement;
     if (modal) modal.close();
   };
@@ -94,7 +98,7 @@ const MovieCharactersModal: React.FC<MovieCharactersModalProps> = ({ selectedCha
                 className="input input-bordered join-item flex-1 text-base-content bg-base-100"
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                disabled={isProcessing}
+                disabled={isLoading}
               />
               <button className="btn join-item btn-primary">
                 <Search className="w-5 h-5" />
@@ -130,22 +134,12 @@ const MovieCharactersModal: React.FC<MovieCharactersModalProps> = ({ selectedCha
             </div>
           )}
           
-          {/* Processing Overlay */}
-          {isProcessing && (
-            <div className="absolute inset-0 bg-base-200/50 flex items-center justify-center">
-              <div className="text-center">
-                <span className="loading loading-spinner loading-lg text-base-content"></span>
-                <p className="mt-4 font-medium text-base-content">Processing movie script...</p>
-              </div>
-            </div>
-          )}
-          
           <div className="modal-action">
             <button 
               type="button"
               className="btn text-base-content"
               onClick={handleClose}
-              disabled={isProcessing}
+              disabled={isLoading}
             >
               Cancel
             </button>
@@ -156,7 +150,7 @@ const MovieCharactersModal: React.FC<MovieCharactersModalProps> = ({ selectedCha
         <button onClick={() => {
           setSearchQuery('');
           setSearchResults([]);
-        }} disabled={isProcessing}>close</button>
+        }} disabled={isLoading}>close</button>
       </form>
     </dialog>
   );
