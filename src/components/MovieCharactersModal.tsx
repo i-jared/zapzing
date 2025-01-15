@@ -61,6 +61,7 @@ const MovieCharactersModal: React.FC<MovieCharactersModalProps> = ({ selectedCha
       const getMovieScript = httpsCallable(functions, 'getMovieScript');
       const result = await getMovieScript({ movieTitle: movie.title, imdbId: movie.imdbId, channelId: selectedChannel.id });
       console.log('Script processed:', result.data);
+      onProcessingChange?.(false);
     } catch (error) {
       console.error('Error processing movie script:', error);
       setIsLoading(false);
