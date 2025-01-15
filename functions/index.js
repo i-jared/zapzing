@@ -1095,15 +1095,15 @@ Recent chat context:
 {chatHistory}
 
 Determine which character would be most appropriate to respond to this message, if any. Consider:
-1. The message content and context
+1. Rely heavily on the movie and message content
 2. The character's personality and role in their movie
 3. Whether the message warrants any response at all
 
 given the above movie and message, give each character in this list a score between 0 and 1 of the probability that they 
 should respond to the message. their names should be exactly as they are in the list before the colon. reply in proper json format and nothing 
-else. Keep in mind that conversations should be short.  If more characters go back and forth, the less likely they are to respond.
-Don't keep the conversation to just one or two characters unless strictly necessary; try to keep everyone involved. 
-Characters from different movies are curious about each other.`),
+else. Keep in mind that conversations should be short.  if characters have gone back and forth for a while (more than 3 messages), they are less 
+likely to respond, until a user messages again.  Don't keep the conversation to just one or two characters unless strictly necessary; 
+try to keep everyone involved.  Characters from different movies are curious about each other.`),
       ]);
 
       // Create character selection chain
@@ -1200,9 +1200,10 @@ Respond to the message: "{message}"
 
 Write a response that:
 1. Matches your character's personality, speech patterns, and knowledge
-2. References the movie context when relevant
+2. References the movie context when relevant. Rely heavily on the movie context.
 3. Is concise (1-3 sentences)
 4. Don't be overly kind or friendly. Match the tone of the movie and character.
+5. Don't use the character's name in every response. it should sound natural.
 
 Output ONLY your response message, no other text or explanation.
 Characters from different movies are initially curious about each other and will respond to each other.
