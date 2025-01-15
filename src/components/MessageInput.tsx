@@ -258,7 +258,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
       console.error('Error removing movie:', error);
     }
   };
-  console.log('isProcessingMovie', isProcessingMovie);
 
   return (
     <div className="absolute bottom-0 left-0 right-0">

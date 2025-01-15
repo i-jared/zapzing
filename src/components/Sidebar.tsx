@@ -546,7 +546,6 @@ const Sidebar: React.FC<SidebarProps> = ({
             <div key={member.uid} className="flex items-center px-0 py-1">
               <button
                 onClick={() => {
-                  console.log(currentUserData);
                   handleCreateDM(member);
                   closeDrawer();
                 }}

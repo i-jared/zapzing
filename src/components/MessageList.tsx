@@ -177,7 +177,7 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>(
                         {msg.isSystem ? (
                           <div className="w-10 rounded-full">
                             <img
-                              src={`url("/assets/favicon.png")`}
+                              src="/assets/favicon.png"
                               alt="System"
                             />
                           </div>
