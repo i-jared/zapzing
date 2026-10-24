@@ -28,10 +28,10 @@ const fetch = require("node-fetch");
 const pdf = require("pdf-parse");
 const { Pinecone } = require("@pinecone-database/pinecone");
 const { OpenAIEmbeddings } = require("@langchain/openai");
-const { RecursiveCharacterTextSplitter } = require("langchain/text_splitter");
+const { RecursiveCharacterTextSplitter } = require("@langchain/textsplitters");
 const { Client } = require("langsmith");
 const { PineconeStore } = require("@langchain/pinecone");
-const { Document } = require("langchain/document");
+const { Document } = require("@langchain/core/documents");
 const { v4: uuidv4 } = require("uuid");
 const { ChatOpenAI } = require("@langchain/openai");
 const {
